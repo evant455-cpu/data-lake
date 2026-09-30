@@ -19,3 +19,13 @@
 | **PyArrow** | The Python library that reads and writes Parquet files |
 | **Parser** | A small function that turns text like `"12.5"` into a real number |
 | **Re-creatable** | Clean files can be deleted and rebuilt from raw at any time, so they may be overwritten |
+| **CSV** | "Comma-separated values": a plain-text table, one row per line, columns split by commas |
+| **Row / column** | A row is one record (one fish sighting); a column is one field across all records (depth) |
+| **Table** | Rows and columns with a fixed set of typed columns |
+| **Timestamp** | A value holding an exact date and time |
+| **UTC** | The world-standard time zone, used so times from different places compare correctly |
+| **Test (pytest)** | Code that checks our code works; `pytest` is the tool that runs them |
+| **Fake data** | Small made-up data used in tests, so tests never touch real data |
+| **Dependency** | An outside library our code needs, listed in `pyproject.toml` (e.g. pyarrow) |
+| **Editable install** | `pip install -e .` makes our `src/` code importable while we keep editing it |
+| **Commit / push** | A commit saves a snapshot of changes in git; a push sends commits to GitHub |

@@ -9,6 +9,7 @@ analysis), which will become the first connector.
 ## Owner and working style (IMPORTANT)
 - Self-taught developer, often on a phone. Not a professional data engineer.
 - GO SLOW. One small lesson at a time, then stop so the owner can absorb it and ask questions.
+- Do NOT quiz him or end lessons with review questions. He wants to walk through the material, not be tested.
 - Explain every new term, tool and abbreviation the first time it appears; add it to `docs/glossary.md`.
 - Keep explanations brief and to the point, but never skip the "why".
 - Diagnose before acting: check the current state of files and environment before changing anything.
@@ -38,6 +39,3 @@ New source = small connector + raw folder + cleaning step. Existing code should 
 - [ ] Lesson 4: first real connector (GFW, reusing ocean-watch code)
 - [ ] Lesson 5: second connector (Gaia astronomy) and cross-domain structure
 - [ ] Later: scheduling (GitHub Actions), data-quality checks, first ML project (e.g. anomaly detection)
-
-## Owner's open question to revisit
-Lesson 1 review questions he was asked: why keep raw data at all, and why put the fetch date in the path.
