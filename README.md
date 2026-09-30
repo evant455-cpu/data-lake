@@ -38,6 +38,12 @@ Ask a question of the warehouse:
 python -c "from datalake.warehousing import query; print(query('SELECT vessel_flag, count(*) FROM ocean.gap_events GROUP BY 1'))"
 ```
 
+Already fetched today (or cleaning failed after the raw file landed)? Rebuild from the raw file, no token or network needed:
+
+```
+python -m datalake.connectors.gfw --raw lake/raw/gfw/gap-events/2026-09-30/2022-01-01_2022-05-01_public-eez-areas-5690.json
+```
+
 Notes: running the same dates + region twice on one day is refused (raw is never overwritten).
 The warehouse table holds the most recent run; every earlier raw and clean file stays on disk.
 Data: Global Fishing Watch. Non-commercial use.

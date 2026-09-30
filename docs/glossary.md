@@ -61,3 +61,6 @@
 | **Smoke test** | A quick run of the real entry point to check that nothing obviously breaks |
 | **CLI (command-line interface)** | Running a program by typing a command, like `python -m datalake.connectors.gfw 2022-01-01 2022-05-01` |
 | **Idempotent** | Safe to run twice with the same result; clean and warehouse steps are, raw refuses instead |
+| **git pull** | Download the newest commits from GitHub into your local copy of the repo |
+| **Stale copy** | A local copy that is behind GitHub, so it is missing newer code |
+| **Idempotent (in practice)** | `--raw` can be run again and again and gives the same result, because clean and warehouse are rebuilt from the unchanged raw file |

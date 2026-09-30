@@ -98,6 +98,37 @@ class PipelineSummary:
     bad_values: dict[str, int]
 
 
+def process_raw(
+    raw_file: Path,
+    *,
+    lake_root: Path | None = None,
+    warehouse_path: Path | None = None,
+    schema: str = "ocean",
+    table: str = "gap_events",
+) -> PipelineSummary:
+    """Clean an already-landed raw file and load it into the warehouse. No network needed.
+
+    `lake_root` is found from the path if not given (it sits four folders above the file:
+    <lake_root>/raw/<source>/<dataset>/<date>/<file>). Safe to repeat: clean and warehouse
+    are re-creatable, so running this again just rebuilds them from the same raw file.
+    """
+    from datalake.cleaning import clean_json
+    from datalake.warehousing import DEFAULT_WAREHOUSE, load_table
+
+    if lake_root is None:
+        if len(raw_file.parents) < 5 or raw_file.parents[3].name != "raw":
+            raise ValueError(f"Expected <lake>/raw/<source>/<dataset>/<date>/<file>, got: {raw_file}")
+        lake_root = raw_file.parents[4]
+    if not raw_file.exists():
+        raise FileNotFoundError(f"Raw file not found: {raw_file}")
+
+    report = clean_json(raw_file, schema=GAP_EVENT_SCHEMA, lake_root=lake_root)
+    rows = load_table(
+        report.path, schema=schema, table=table, warehouse_path=warehouse_path or DEFAULT_WAREHOUSE
+    )
+    return PipelineSummary(raw_file, report.path, f"{schema}.{table}", rows, report.bad_values)
+
+
 async def run_gap_pipeline(
     client,
     *,
@@ -115,46 +146,54 @@ async def run_gap_pipeline(
     Note: the warehouse table holds the most recent run (load_table replaces it).
     Every raw and clean file from earlier runs is still kept on disk.
     """
-    from datalake.cleaning import clean_json
-    from datalake.warehousing import DEFAULT_WAREHOUSE, load_table
-
     raw = await land_gap_events(
         client, start_date=start_date, end_date=end_date, region=region, limit=limit, lake_root=lake_root
     )
-    report = clean_json(raw, schema=GAP_EVENT_SCHEMA, lake_root=lake_root)
-    rows = load_table(
-        report.path, schema=schema, table=table, warehouse_path=warehouse_path or DEFAULT_WAREHOUSE
-    )
-    return PipelineSummary(raw, report.path, f"{schema}.{table}", rows, report.bad_values)
+    return process_raw(raw, lake_root=lake_root, warehouse_path=warehouse_path, schema=schema, table=table)
 
 
 def main() -> None:
-    """Run the whole pipeline: python -m datalake.connectors.gfw START END [REGION_ID]"""
+    """Command line.
+
+    Fetch + clean + load:  python -m datalake.connectors.gfw START END [REGION_ID]
+    Re-clean a raw file:   python -m datalake.connectors.gfw --raw PATH_TO_RAW_JSON
+    """
     import argparse
     import asyncio
 
-    import gfwapiclient as gfw  # installed separately: pip install gfw-api-python-client
-
-    p = argparse.ArgumentParser(description="Land GFW AIS-gap events in the raw layer.")
-    p.add_argument("start_date")
-    p.add_argument("end_date")
+    p = argparse.ArgumentParser(description="Global Fishing Watch AIS-gap events: raw -> clean -> warehouse.")
+    p.add_argument("start_date", nargs="?")
+    p.add_argument("end_date", nargs="?")
     p.add_argument("region_id", nargs="?", default="5690")
+    p.add_argument("--raw", help="Skip fetching: clean and load this existing raw JSON file (no token needed).")
     a = p.parse_args()
 
-    client = gfw.Client(access_token=get_token())
-    region = {"dataset": "public-eez-areas", "id": a.region_id}
-    try:
-        r = asyncio.run(run_gap_pipeline(client, start_date=a.start_date, end_date=a.end_date, region=region))
-    except FileExistsError as e:
-        # The raw layer never overwrites. Same dates + region on the same day = same filename.
-        raise SystemExit(f"Already fetched today, raw data is never overwritten.\n{e}\nUse different dates/region, or run again tomorrow.")
+    if a.raw:
+        r = process_raw(Path(a.raw))
+    else:
+        if not (a.start_date and a.end_date):
+            p.error("give START and END dates, or use --raw PATH")
+        import gfwapiclient as gfw  # installed separately: pip install gfw-api-python-client
+
+        client = gfw.Client(access_token=get_token())
+        region = {"dataset": "public-eez-areas", "id": a.region_id}
+        try:
+            r = asyncio.run(run_gap_pipeline(client, start_date=a.start_date, end_date=a.end_date, region=region))
+        except FileExistsError as e:
+            # The raw layer never overwrites. Same dates + region on the same day = same filename.
+            raise SystemExit(
+                f"Already fetched today, raw data is never overwritten.\n{e}\n"
+                "To re-clean that file without fetching again, run:\n"
+                "  python -m datalake.connectors.gfw --raw <that path>"
+            )
+
     bad = {k: v for k, v in r.bad_values.items() if v}
     print(f"1. Raw:       {r.raw_path}")
     print(f"2. Clean:     {r.clean_path}")
     print(f"3. Warehouse: {r.table} ({r.rows_loaded} rows)")
     print(f"Values that did not fit their type: {bad or 'none'}")
     if r.rows_loaded == 0:
-        print("No events came back. Check the dates, region id and token.")
+        print("No events in the file. Check the dates, region id and token.")
     print("Try: python -c \"from datalake.warehousing import query; print(query('SELECT count(*) FROM ocean.gap_events'))\"")
     print("Data: Global Fishing Watch")
 

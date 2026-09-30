@@ -134,3 +134,30 @@ GAPS_FULL = pd.DataFrame({
     "gap": [{"duration_hours": "20", "intentional_disabling": True},
             {"duration_hours": "30", "intentional_disabling": False}],
 })
+
+
+def test_process_raw_rebuilds_from_existing_raw_without_a_client(tmp_path):
+    from datalake.connectors.gfw import process_raw, run_gap_pipeline
+    from datalake.warehousing import query
+
+    wh = tmp_path / "wh.duckdb"
+    first = asyncio.run(run_gap_pipeline(
+        FakeClient(GAPS_FULL), start_date="2022-01-01", end_date="2022-05-01", region=REGION,
+        lake_root=tmp_path, warehouse_path=wh))
+    first.clean_path.unlink()  # pretend the clean file is lost or the cleaning code changed
+    wh.unlink()
+    again = process_raw(first.raw_path, warehouse_path=wh)  # lake_root found from the path
+    assert again.clean_path == first.clean_path and again.clean_path.exists()
+    assert again.rows_loaded == 2
+    assert query("SELECT count(*) FROM ocean.gap_events", wh) == [(2,)]
+
+
+def test_process_raw_rejects_files_outside_the_lake_layout_and_missing_files(tmp_path):
+    from datalake.connectors.gfw import process_raw
+
+    stray = tmp_path / "stray.json"
+    stray.write_text("[]")
+    with pytest.raises(ValueError, match="Expected"):
+        process_raw(stray)
+    with pytest.raises(FileNotFoundError):
+        process_raw(tmp_path / "raw" / "gfw" / "gap-events" / "2026-09-30" / "nope.json")
