@@ -47,3 +47,10 @@
 | **JSON** | A text format for nested data (a record can hold smaller records); used when a table is too flat |
 | **AIS gap event** | A period when a ship's tracking transmitter went silent ("went dark") |
 | **Optional dependencies** | Extra libraries only some features need, installed with `pip install -e ".[gfw]"` |
+| **Nested data** | A record that contains smaller records, like a gap event holding a `vessel` with its own id and flag |
+| **Path (dotted)** | A way to point inside nested data: `vessel.id` means "the id inside vessel" |
+| **Flatten** | Turning nested records into ordinary table columns, one value per column |
+| **Missing vs. bad** | Missing: the value is absent or null (normal). Bad: it exists but does not fit its type (counted and reported) |
+| **Boolean (bool)** | A true/false value |
+| **Refactor** | Reorganizing code without changing what it does; the old tests prove nothing broke |
+| **End-to-end test** | A test that runs the whole pipeline (fetch, raw, clean, warehouse, SQL) on fake data |

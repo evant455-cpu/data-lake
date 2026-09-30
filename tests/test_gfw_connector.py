@@ -75,3 +75,29 @@ def test_token_env_then_file_then_error(tmp_path, monkeypatch):
     assert get_token(env) == "from-file"
     monkeypatch.setenv(TOKEN_ENV, "from-env")
     assert get_token(env) == "from-env"
+
+
+def test_end_to_end_fake_gfw_to_warehouse_sql(tmp_path):
+    from datalake.cleaning import clean_json
+    from datalake.connectors.gfw import GAP_EVENT_SCHEMA
+    from datalake.warehousing import load_table, query
+
+    df = pd.DataFrame({
+        "start": pd.to_datetime(["2022-01-01", "2022-01-05", "2022-02-01"], utc=True),
+        "end": pd.to_datetime(["2022-01-02", "2022-01-06", "2022-02-02"], utc=True),
+        "vessel": [{"id": "A", "name": "ALPHA", "type": "fishing", "flag": "RUS"},
+                   {"id": "A", "name": "ALPHA", "type": "fishing", "flag": "RUS"},
+                   {"id": "B", "name": "BRAVO", "type": "cargo", "flag": "PAN"}],
+        "gap": [{"duration_hours": "20", "intentional_disabling": True},
+                {"duration_hours": "30", "intentional_disabling": True},
+                {"duration_hours": "500", "intentional_disabling": False}],
+    })
+    _, raw = _land(tmp_path, df=df)
+    report = clean_json(raw, schema=GAP_EVENT_SCHEMA, lake_root=tmp_path)
+    assert sum(report.bad_values.values()) == 0
+    wh = tmp_path / "wh.duckdb"
+    assert load_table(report.path, schema="ocean", table="gap_events", warehouse_path=wh) == 3
+    rows = query(
+        "SELECT vessel_id, count(*), sum(duration_hours) FROM ocean.gap_events "
+        "WHERE vessel_type = 'fishing' AND intentional_disabling GROUP BY vessel_id", wh)
+    assert rows == [("A", 2, 50.0)]

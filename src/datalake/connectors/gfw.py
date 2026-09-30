@@ -15,6 +15,20 @@ from pathlib import Path
 GAPS_DATASET = "public-global-gaps-events:latest"
 TOKEN_ENV = "GFW_API_ACCESS_TOKEN"
 
+# How to flatten a raw gap event into a clean table: column -> (type, path into the record).
+# Field names follow the ones ocean-watch's analysis already relies on. GFW sends
+# duration_hours as text, so the cleaner converts it to a real number.
+GAP_EVENT_SCHEMA = {
+    "start": ("timestamp", "start"),
+    "end": ("timestamp", "end"),
+    "vessel_id": ("string", "vessel.id"),
+    "vessel_name": ("string", "vessel.name"),
+    "vessel_type": ("string", "vessel.type"),
+    "vessel_flag": ("string", "vessel.flag"),
+    "duration_hours": ("float", "gap.duration_hours"),
+    "intentional_disabling": ("bool", "gap.intentional_disabling"),
+}
+
 
 def get_token(env_file: Path = Path(".env")) -> str:
     """Find the token: environment variable first, then a git-ignored .env file.

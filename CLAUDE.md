@@ -36,6 +36,6 @@ New source = small connector + raw folder + cleaning step. Existing code should 
 - [x] Lesson 1: layout and `landing.land_raw` (raw data + provenance sidecar + no-overwrite rule)
 - [x] Lesson 2: raw -> clean (`datalake.cleaning.clean_csv`: parse, types, nulls, Parquet; uses pyarrow)
 - [x] Lesson 3: clean -> warehouse (`datalake.warehousing`: load_table + read-only query; DuckDB schemas per domain)
-- [x] Lesson 4: first connector (`datalake.connectors.gfw`: land AIS-gap events as raw JSON; fake-client tests; NOT yet run against the live API, sandbox network blocks GFW). Next: flatten the JSON into clean Parquet, then run it live from Colab/phone
+- [x] Lesson 4: first connector (`datalake.connectors.gfw`: land AIS-gap events as raw JSON; fake-client tests; NOT yet run against the live API, sandbox network blocks GFW). Lesson 4b done: `cleaning.clean_json` + `gfw.GAP_EVENT_SCHEMA` flatten raw events to Parquet -> `ocean.gap_events` (tested end to end with fake data). Next: run it live from Colab/phone. Known gap: clean output is named <date>.parquet per dataset, so two raw files landed the same day in one dataset overwrite each other's clean file.
 - [ ] Lesson 5: second connector (Gaia astronomy) and cross-domain structure
 - [ ] Later: scheduling (GitHub Actions), data-quality checks, first ML project (e.g. anomaly detection)
