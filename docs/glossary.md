@@ -14,3 +14,8 @@
 | **DuckDB** | A free database that runs as a library and queries files with SQL, no server needed |
 | **Connector** | Code that knows how to fetch one source |
 | **Feature** | A column a machine-learning model learns from |
+| **Type (dtype)** | What kind of value a column holds: text, whole number (int), decimal (float), timestamp |
+| **Null** | The marker for "value missing or unusable" (not the same as empty text or zero) |
+| **PyArrow** | The Python library that reads and writes Parquet files |
+| **Parser** | A small function that turns text like `"12.5"` into a real number |
+| **Re-creatable** | Clean files can be deleted and rebuilt from raw at any time, so they may be overwritten |
