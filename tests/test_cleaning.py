@@ -23,7 +23,7 @@ def _land(tmp_path, text=CSV):
 
 def test_writes_typed_parquet_in_expected_place(tmp_path):
     report = clean_csv(_land(tmp_path), schema=SCHEMA, lake_root=tmp_path)
-    assert report.path == tmp_path / "clean" / "demo" / "fish" / "2026-09-30.parquet"
+    assert report.path == tmp_path / "clean" / "demo" / "fish" / "2026-09-30" / "f.parquet"
     table = pq.read_table(report.path)
     assert table.column_names == ["name", "depth_m", "count", "seen_at"]  # "extra" dropped
     assert str(table.schema.field("depth_m").type) == "double"
@@ -54,3 +54,14 @@ def test_missing_column_and_unknown_type_fail_loudly(tmp_path):
         clean_csv(raw, schema={"nope": "string"}, lake_root=tmp_path)
     with pytest.raises(ValueError, match="Unknown column types"):
         clean_csv(raw, schema={"name": "decimal"}, lake_root=tmp_path)
+
+
+def test_two_raw_files_same_day_same_dataset_get_separate_clean_files(tmp_path):
+    a = land_raw(b"name,depth_m,count\ntuna,1.0,1\n", source="demo", dataset="fish", filename="north.csv", lake_root=tmp_path, now=WHEN)
+    b = land_raw(b"name,depth_m,count\nshark,2.0,2\nray,3.0,3\n", source="demo", dataset="fish", filename="south.csv", lake_root=tmp_path, now=WHEN)
+    schema = {"name": "string", "depth_m": "float", "count": "int"}
+    ra = clean_csv(a, schema=schema, lake_root=tmp_path)
+    rb = clean_csv(b, schema=schema, lake_root=tmp_path)
+    assert ra.path != rb.path
+    assert pq.read_table(ra.path).num_rows == 1  # first file's clean output survived the second run
+    assert pq.read_table(rb.path).num_rows == 2

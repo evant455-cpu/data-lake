@@ -19,7 +19,7 @@ analysis), which will become the first connector.
 ## Architecture (medallion layout)
 1. `lake/raw/<source>/<dataset>/<YYYY-MM-DD>/`: bytes exactly as fetched, never edited, never overwritten,
    each with a `.meta.json` sidecar (source, fetch time, sha256).
-2. `lake/clean/`: tidy, typed tables (Parquet). Re-creatable from raw at any time.
+2. `lake/clean/<source>/<dataset>/<date>/<raw stem>.parquet`: tidy, typed tables (Parquet), one per raw file. Re-creatable from raw at any time.
 3. `warehouse/`: curated, query-ready (DuckDB). One warehouse, one schema per domain (e.g. `ocean`, `astro`).
    Separate warehouses only for different access rules or projects.
 New source = small connector + raw folder + cleaning step. Existing code should not change.
@@ -36,6 +36,6 @@ New source = small connector + raw folder + cleaning step. Existing code should 
 - [x] Lesson 1: layout and `landing.land_raw` (raw data + provenance sidecar + no-overwrite rule)
 - [x] Lesson 2: raw -> clean (`datalake.cleaning.clean_csv`: parse, types, nulls, Parquet; uses pyarrow)
 - [x] Lesson 3: clean -> warehouse (`datalake.warehousing`: load_table + read-only query; DuckDB schemas per domain)
-- [x] Lesson 4: first connector (`datalake.connectors.gfw`: land AIS-gap events as raw JSON; fake-client tests; NOT yet run against the live API, sandbox network blocks GFW). Lesson 4b done: `cleaning.clean_json` + `gfw.GAP_EVENT_SCHEMA` flatten raw events to Parquet -> `ocean.gap_events` (tested end to end with fake data). Next: run it live from Colab/phone. Known gap: clean output is named <date>.parquet per dataset, so two raw files landed the same day in one dataset overwrite each other's clean file.
+- [x] Lesson 4: first connector (`datalake.connectors.gfw`: land AIS-gap events as raw JSON; fake-client tests; NOT yet run against the live API, sandbox network blocks GFW). Lesson 4b done: `cleaning.clean_json` + `gfw.GAP_EVENT_SCHEMA` flatten raw events to Parquet -> `ocean.gap_events` (tested end to end with fake data). Next: run it live from Colab/phone. Naming fix done: clean files mirror raw as `lake/clean/<source>/<dataset>/<date>/<raw stem>.parquet`, so same-day raw files never collide.
 - [ ] Lesson 5: second connector (Gaia astronomy) and cross-domain structure
 - [ ] Later: scheduling (GitHub Actions), data-quality checks, first ML project (e.g. anomaly detection)

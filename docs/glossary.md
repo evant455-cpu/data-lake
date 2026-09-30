@@ -54,3 +54,6 @@
 | **Boolean (bool)** | A true/false value |
 | **Refactor** | Reorganizing code without changing what it does; the old tests prove nothing broke |
 | **End-to-end test** | A test that runs the whole pipeline (fetch, raw, clean, warehouse, SQL) on fake data |
+| **Collision** | Two different things trying to use the same name or path, so one overwrites the other |
+| **Stem** | A filename without its extension: the stem of `north.csv` is `north` |
+| **Reproduce first (failing test)** | Write a test that shows the bug before fixing it, so you know the fix is what made it pass |

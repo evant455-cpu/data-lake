@@ -79,12 +79,15 @@ def _write_clean(
     bad_values: dict[str, int],
     rows_in: int,
 ) -> CleanReport:
-    """Turn collected columns into a typed table and save it as Parquet in lake/clean/."""
+    """Turn collected columns into a typed table and save it as Parquet in
+    lake/clean/<source>/<dataset>/<date>/<raw filename without extension>.parquet."""
     source, dataset, date = _raw_location(raw_file, lake_root)
     table = pa.table({name: pa.array(values, type=ARROW_TYPES[types[name]]) for name, values in columns.items()})
-    out_dir = lake_root / "clean" / source / dataset
+    # Mirror the raw layout: one clean file per raw file, so two raw files
+    # landed on the same day can never overwrite each other's clean output.
+    out_dir = lake_root / "clean" / source / dataset / date
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{date}.parquet"
+    out_path = out_dir / f"{raw_file.stem}.parquet"
     pq.write_table(table, out_path)
     return CleanReport(path=out_path, rows_in=rows_in, rows_out=table.num_rows, bad_values=bad_values)
 

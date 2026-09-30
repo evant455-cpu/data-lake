@@ -28,7 +28,7 @@ def _land(tmp_path, records=RECORDS, name="e.json"):
 
 def test_flattens_nested_paths_into_typed_columns(tmp_path):
     report = clean_json(_land(tmp_path), schema=SCHEMA, lake_root=tmp_path)
-    assert report.path == tmp_path / "clean" / "demo" / "ev" / "2026-09-30.parquet"
+    assert report.path == tmp_path / "clean" / "demo" / "ev" / "2026-09-30" / "e.parquet"
     table = pq.read_table(report.path)
     assert table.column_names == ["vid", "hours", "dark", "start"]
     assert [str(table.schema.field(n).type) for n in table.column_names][:3] == ["string", "double", "bool"]
