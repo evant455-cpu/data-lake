@@ -36,3 +36,14 @@
 | **Read-only** | Opened so questions can be asked but the data cannot be changed |
 | **SQL injection** | A bug where untrusted text becomes SQL commands; avoided with parameters and name checks |
 | **Parameter (SQL)** | A safe placeholder (`?`) for a value, so text is never treated as commands |
+| **API** | A web address a program calls to request data from a service (here, Global Fishing Watch) |
+| **API token** | A secret password-like string that proves who you are to an API; never goes in code or git |
+| **Environment variable** | A named setting outside your code, like `GFW_API_ACCESS_TOKEN`, where secrets can live |
+| **`.env` file** | A git-ignored text file holding secrets for local use |
+| **Client** | A library object that makes the API calls for you |
+| **Fake client** | A stand-in client in tests that returns made-up data, so tests need no network or token |
+| **Dependency injection** | Passing the client into a function instead of creating it inside, so tests can swap in a fake |
+| **async / await** | Python's way to wait for slow network replies without freezing; the GFW client uses it |
+| **JSON** | A text format for nested data (a record can hold smaller records); used when a table is too flat |
+| **AIS gap event** | A period when a ship's tracking transmitter went silent ("went dark") |
+| **Optional dependencies** | Extra libraries only some features need, installed with `pip install -e ".[gfw]"` |
