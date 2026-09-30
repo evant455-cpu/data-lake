@@ -57,3 +57,7 @@
 | **Collision** | Two different things trying to use the same name or path, so one overwrites the other |
 | **Stem** | A filename without its extension: the stem of `north.csv` is `north` |
 | **Reproduce first (failing test)** | Write a test that shows the bug before fixing it, so you know the fix is what made it pass |
+| **Orchestration** | One function or command that runs several pipeline steps in order (fetch, raw, clean, warehouse) |
+| **Smoke test** | A quick run of the real entry point to check that nothing obviously breaks |
+| **CLI (command-line interface)** | Running a program by typing a command, like `python -m datalake.connectors.gfw 2022-01-01 2022-05-01` |
+| **Idempotent** | Safe to run twice with the same result; clean and warehouse steps are, raw refuses instead |

@@ -10,6 +10,7 @@ Data: Global Fishing Watch. Non-commercial use.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 GAPS_DATASET = "public-global-gaps-events:latest"
@@ -86,8 +87,49 @@ async def land_gap_events(
     )
 
 
+@dataclass
+class PipelineSummary:
+    """What a full run did, printed at the end so nothing is hidden."""
+
+    raw_path: Path
+    clean_path: Path
+    table: str
+    rows_loaded: int
+    bad_values: dict[str, int]
+
+
+async def run_gap_pipeline(
+    client,
+    *,
+    start_date: str,
+    end_date: str,
+    region: dict,
+    limit: int = 100,
+    lake_root: Path = Path("lake"),
+    warehouse_path: Path | None = None,
+    schema: str = "ocean",
+    table: str = "gap_events",
+) -> PipelineSummary:
+    """The whole journey in one call: fetch -> raw -> clean -> warehouse.
+
+    Note: the warehouse table holds the most recent run (load_table replaces it).
+    Every raw and clean file from earlier runs is still kept on disk.
+    """
+    from datalake.cleaning import clean_json
+    from datalake.warehousing import DEFAULT_WAREHOUSE, load_table
+
+    raw = await land_gap_events(
+        client, start_date=start_date, end_date=end_date, region=region, limit=limit, lake_root=lake_root
+    )
+    report = clean_json(raw, schema=GAP_EVENT_SCHEMA, lake_root=lake_root)
+    rows = load_table(
+        report.path, schema=schema, table=table, warehouse_path=warehouse_path or DEFAULT_WAREHOUSE
+    )
+    return PipelineSummary(raw, report.path, f"{schema}.{table}", rows, report.bad_values)
+
+
 def main() -> None:
-    """Run from the command line: python -m datalake.connectors.gfw START END [REGION_ID]"""
+    """Run the whole pipeline: python -m datalake.connectors.gfw START END [REGION_ID]"""
     import argparse
     import asyncio
 
@@ -101,8 +143,20 @@ def main() -> None:
 
     client = gfw.Client(access_token=get_token())
     region = {"dataset": "public-eez-areas", "id": a.region_id}
-    path = asyncio.run(land_gap_events(client, start_date=a.start_date, end_date=a.end_date, region=region))
-    print(f"Landed: {path}\nData: Global Fishing Watch")
+    try:
+        r = asyncio.run(run_gap_pipeline(client, start_date=a.start_date, end_date=a.end_date, region=region))
+    except FileExistsError as e:
+        # The raw layer never overwrites. Same dates + region on the same day = same filename.
+        raise SystemExit(f"Already fetched today, raw data is never overwritten.\n{e}\nUse different dates/region, or run again tomorrow.")
+    bad = {k: v for k, v in r.bad_values.items() if v}
+    print(f"1. Raw:       {r.raw_path}")
+    print(f"2. Clean:     {r.clean_path}")
+    print(f"3. Warehouse: {r.table} ({r.rows_loaded} rows)")
+    print(f"Values that did not fit their type: {bad or 'none'}")
+    if r.rows_loaded == 0:
+        print("No events came back. Check the dates, region id and token.")
+    print("Try: python -c \"from datalake.warehousing import query; print(query('SELECT count(*) FROM ocean.gap_events'))\"")
+    print("Data: Global Fishing Watch")
 
 
 if __name__ == "__main__":

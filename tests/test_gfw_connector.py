@@ -101,3 +101,36 @@ def test_end_to_end_fake_gfw_to_warehouse_sql(tmp_path):
         "SELECT vessel_id, count(*), sum(duration_hours) FROM ocean.gap_events "
         "WHERE vessel_type = 'fishing' AND intentional_disabling GROUP BY vessel_id", wh)
     assert rows == [("A", 2, 50.0)]
+
+
+def test_run_gap_pipeline_does_all_three_steps_and_reports(tmp_path):
+    from datalake.connectors.gfw import run_gap_pipeline
+    from datalake.warehousing import query
+
+    wh = tmp_path / "wh.duckdb"
+    client = FakeClient(GAPS_FULL)
+    summary = asyncio.run(run_gap_pipeline(
+        client, start_date="2022-01-01", end_date="2022-05-01", region=REGION,
+        lake_root=tmp_path, warehouse_path=wh))
+    assert summary.raw_path.exists() and summary.clean_path.exists()
+    assert summary.table == "ocean.gap_events" and summary.rows_loaded == 2
+    assert sum(summary.bad_values.values()) == 0
+    assert query("SELECT count(*) FROM ocean.gap_events", wh) == [(2,)]
+
+
+def test_pipeline_with_no_events_loads_zero_rows(tmp_path):
+    from datalake.connectors.gfw import run_gap_pipeline
+
+    summary = asyncio.run(run_gap_pipeline(
+        FakeClient(pd.DataFrame()), start_date="2022-01-01", end_date="2022-05-01", region=REGION,
+        lake_root=tmp_path, warehouse_path=tmp_path / "wh.duckdb"))
+    assert summary.rows_loaded == 0
+
+
+GAPS_FULL = pd.DataFrame({
+    "start": pd.to_datetime(["2022-01-01", "2022-01-05"], utc=True),
+    "end": pd.to_datetime(["2022-01-02", "2022-01-06"], utc=True),
+    "vessel": [{"id": "A", "name": "ALPHA", "type": "fishing", "flag": "RUS"}] * 2,
+    "gap": [{"duration_hours": "20", "intentional_disabling": True},
+            {"duration_hours": "30", "intentional_disabling": False}],
+})
