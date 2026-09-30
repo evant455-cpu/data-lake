@@ -64,3 +64,5 @@
 | **git pull** | Download the newest commits from GitHub into your local copy of the repo |
 | **Stale copy** | A local copy that is behind GitHub, so it is missing newer code |
 | **Idempotent (in practice)** | `--raw` can be run again and again and gives the same result, because clean and warehouse are rebuilt from the unchanged raw file |
+| **SSVID / MMSI** | A ship's broadcast ID number, sent by its tracker; its first three digits usually hint at the registration country |
+| **Verified against live data** | Checked with real API output, not just fake test data; fake tests prove the code works, live runs prove our assumptions about the source are right |
