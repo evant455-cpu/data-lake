@@ -19,6 +19,10 @@ TOKEN_ENV = "GFW_API_ACCESS_TOKEN"
 # How to flatten a raw gap event into a clean table: column -> (type, path into the record).
 # Field names follow the ones ocean-watch's analysis already relies on. GFW sends
 # duration_hours as text, so the cleaner converts it to a real number.
+# One gap = one vessel going dark at one moment, so these two columns identify an event.
+# If the same event shows up in two fetches, the newer copy replaces the older one.
+GAP_EVENT_KEY = ("vessel_id", "start")
+
 GAP_EVENT_SCHEMA = {
     "start": ("timestamp", "start"),
     "end": ("timestamp", "end"),
@@ -94,8 +98,13 @@ class PipelineSummary:
     raw_path: Path
     clean_path: Path
     table: str
-    rows_loaded: int
+    rows_loaded: int  # rows this file contributed (new + updated)
     bad_values: dict[str, int]
+    new: int = 0  # events not seen before
+    updated: int = 0  # events already in the table, replaced by this newer copy
+    skipped_no_key: int = 0  # events missing vessel id or start time (cannot be matched)
+    duplicates_in_file: int = 0
+    table_total: int = 0  # rows in the table afterwards
 
 
 def process_raw(
@@ -106,14 +115,14 @@ def process_raw(
     schema: str = "ocean",
     table: str = "gap_events",
 ) -> PipelineSummary:
-    """Clean an already-landed raw file and load it into the warehouse. No network needed.
+    """Clean an already-landed raw file and add it to the warehouse table. No network needed.
 
     `lake_root` is found from the path if not given (it sits four folders above the file:
     <lake_root>/raw/<source>/<dataset>/<date>/<file>). Safe to repeat: clean and warehouse
     are re-creatable, so running this again just rebuilds them from the same raw file.
     """
     from datalake.cleaning import clean_json
-    from datalake.warehousing import DEFAULT_WAREHOUSE, load_table
+    from datalake.warehousing import DEFAULT_WAREHOUSE, append_table
 
     if lake_root is None:
         if len(raw_file.parents) < 5 or raw_file.parents[3].name != "raw":
@@ -123,10 +132,16 @@ def process_raw(
         raise FileNotFoundError(f"Raw file not found: {raw_file}")
 
     report = clean_json(raw_file, schema=GAP_EVENT_SCHEMA, lake_root=lake_root)
-    rows = load_table(
-        report.path, schema=schema, table=table, warehouse_path=warehouse_path or DEFAULT_WAREHOUSE
+    res = append_table(
+        report.path, schema=schema, table=table, key=GAP_EVENT_KEY,
+        warehouse_path=warehouse_path or DEFAULT_WAREHOUSE,
     )
-    return PipelineSummary(raw_file, report.path, f"{schema}.{table}", rows, report.bad_values)
+    return PipelineSummary(
+        raw_path=raw_file, clean_path=report.path, table=f"{schema}.{table}",
+        rows_loaded=res.new + res.updated, bad_values=report.bad_values, new=res.new,
+        updated=res.updated, skipped_no_key=res.skipped_no_key,
+        duplicates_in_file=res.duplicates_in_file, table_total=res.total,
+    )
 
 
 async def run_gap_pipeline(
@@ -143,8 +158,7 @@ async def run_gap_pipeline(
 ) -> PipelineSummary:
     """The whole journey in one call: fetch -> raw -> clean -> warehouse.
 
-    Note: the warehouse table holds the most recent run (load_table replaces it).
-    Every raw and clean file from earlier runs is still kept on disk.
+    Each run is added to the warehouse table; events seen before are replaced by the newer copy.
     """
     raw = await land_gap_events(
         client, start_date=start_date, end_date=end_date, region=region, limit=limit, lake_root=lake_root
@@ -190,7 +204,10 @@ def main() -> None:
     bad = {k: v for k, v in r.bad_values.items() if v}
     print(f"1. Raw:       {r.raw_path}")
     print(f"2. Clean:     {r.clean_path}")
-    print(f"3. Warehouse: {r.table} ({r.rows_loaded} rows)")
+    print(f"3. Warehouse: {r.table}: {r.new} new, {r.updated} updated, {r.table_total} total")
+    if r.skipped_no_key or r.duplicates_in_file:
+        print(f"   Not loaded: {r.skipped_no_key} missing vessel id or start time, "
+              f"{r.duplicates_in_file} repeated inside the file")
     print(f"Values that did not fit their type: {bad or 'none'}")
     if r.rows_loaded == 0:
         print("No events in the file. Check the dates, region id and token.")

@@ -161,3 +161,34 @@ def test_process_raw_rejects_files_outside_the_lake_layout_and_missing_files(tmp
         process_raw(stray)
     with pytest.raises(FileNotFoundError):
         process_raw(tmp_path / "raw" / "gfw" / "gap-events" / "2026-09-30" / "nope.json")
+
+
+def _events(*rows):
+    """Fake GFW gap events from (vessel_id, start_date, hours) tuples."""
+    return pd.DataFrame({
+        "start": pd.to_datetime([r[1] for r in rows], utc=True),
+        "end": pd.to_datetime([r[1] for r in rows], utc=True) + pd.Timedelta(hours=5),
+        "vessel": [{"id": r[0], "name": "N", "type": "fishing", "flag": "RUS"} for r in rows],
+        "gap": [{"duration_hours": str(r[2]), "intentional_disabling": True} for r in rows],
+    })
+
+
+def test_two_overlapping_fetches_build_up_one_table(tmp_path):
+    from datalake.connectors.gfw import run_gap_pipeline
+    from datalake.warehousing import query
+
+    wh = tmp_path / "wh.duckdb"
+
+    def run(df, start, end):
+        return asyncio.run(run_gap_pipeline(
+            FakeClient(df), start_date=start, end_date=end, region=REGION, lake_root=tmp_path, warehouse_path=wh))
+
+    a = run(_events(("A", "2022-01-05", 10), ("B", "2022-02-05", 20)), "2022-01-01", "2022-03-01")
+    assert (a.new, a.updated, a.table_total) == (2, 0, 2)
+    # Second fetch overlaps: B's Feb event comes again (with a revised duration) plus one new event.
+    b = run(_events(("B", "2022-02-05", 25), ("C", "2022-03-10", 30)), "2022-02-01", "2022-04-01")
+    assert (b.new, b.updated, b.table_total) == (1, 1, 3)
+    rows = query("SELECT vessel_id, duration_hours FROM ocean.gap_events ORDER BY vessel_id", wh)
+    assert rows == [("A", 10.0), ("B", 25.0), ("C", 30.0)]  # B holds the newer value
+    files = {r[0] for r in query("SELECT DISTINCT _source_file FROM ocean.gap_events", wh)}
+    assert len(files) == 2  # rows remember which fetch they came from

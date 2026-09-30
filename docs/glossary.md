@@ -66,3 +66,11 @@
 | **Idempotent (in practice)** | `--raw` can be run again and again and gives the same result, because clean and warehouse are rebuilt from the unchanged raw file |
 | **SSVID / MMSI** | A ship's broadcast ID number, sent by its tracker; its first three digits usually hint at the registration country |
 | **Verified against live data** | Checked with real API output, not just fake test data; fake tests prove the code works, live runs prove our assumptions about the source are right |
+| **Upsert** | "Update or insert": if a row with the same key exists, replace it; otherwise add it |
+| **Key (natural key)** | The column(s) that uniquely identify a row; for a gap event, the vessel id plus the start time |
+| **Deduplicate** | Removing repeated copies of the same record so each appears once |
+| **Lineage** | A record of where each row came from; here the `_source_file` column |
+| **Transaction** | A group of database steps that all succeed together or are all undone, so a failure never leaves half-finished changes |
+| **Rollback** | Undoing a transaction's steps after a failure |
+| **Schema drift** | The shape of incoming data changing (new or missing columns); we stop loudly instead of mixing shapes |
+| **Mutation check** | Deliberately breaking code to prove the tests notice; a test that cannot fail proves nothing |

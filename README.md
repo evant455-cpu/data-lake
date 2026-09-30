@@ -45,5 +45,8 @@ python -m datalake.connectors.gfw --raw lake/raw/gfw/gap-events/2026-09-30/2022-
 ```
 
 Notes: running the same dates + region twice on one day is refused (raw is never overwritten).
-The warehouse table holds the most recent run; every earlier raw and clean file stays on disk.
+Each run is ADDED to `ocean.gap_events`: an event already in the table (same vessel and start time)
+is replaced by the newer copy, anything else is added. The third output line shows how many were new,
+updated, and the table total. Each row's `_source_file` column says which fetch it came from.
+Re-running the same file is harmless (it reports 0 new, N updated).
 Data: Global Fishing Watch. Non-commercial use.
