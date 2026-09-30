@@ -1,0 +1,12 @@
+# Data is big and sometimes licensed; it never goes in git. Only code and docs do.
+lake/raw/*
+lake/clean/*
+warehouse/*
+!lake/raw/.gitkeep
+!lake/clean/.gitkeep
+!warehouse/.gitkeep
+.env
+*.token
+__pycache__/
+.pytest_cache/
+*.egg-info/
