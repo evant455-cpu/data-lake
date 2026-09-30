@@ -29,3 +29,10 @@
 | **Dependency** | An outside library our code needs, listed in `pyproject.toml` (e.g. pyarrow) |
 | **Editable install** | `pip install -e .` makes our `src/` code importable while we keep editing it |
 | **Commit / push** | A commit saves a snapshot of changes in git; a push sends commits to GitHub |
+| **SQL** | The language for asking questions of tables ("show me all fish deeper than 20m") |
+| **Query** | One question written in SQL |
+| **Warehouse table** | A curated table inside the warehouse, loaded from a clean Parquet file |
+| **Schema (warehouse)** | A named section grouping a domain's tables, e.g. `ocean.sightings` |
+| **Read-only** | Opened so questions can be asked but the data cannot be changed |
+| **SQL injection** | A bug where untrusted text becomes SQL commands; avoided with parameters and name checks |
+| **Parameter (SQL)** | A safe placeholder (`?`) for a value, so text is never treated as commands |

@@ -35,7 +35,7 @@ New source = small connector + raw folder + cleaning step. Existing code should 
 ## Lesson plan (status)
 - [x] Lesson 1: layout and `landing.land_raw` (raw data + provenance sidecar + no-overwrite rule)
 - [x] Lesson 2: raw -> clean (`datalake.cleaning.clean_csv`: parse, types, nulls, Parquet; uses pyarrow)
-- [ ] Lesson 3: clean -> warehouse (DuckDB schemas, SQL queries)
+- [x] Lesson 3: clean -> warehouse (`datalake.warehousing`: load_table + read-only query; DuckDB schemas per domain)
 - [ ] Lesson 4: first real connector (GFW, reusing ocean-watch code)
 - [ ] Lesson 5: second connector (Gaia astronomy) and cross-domain structure
 - [ ] Later: scheduling (GitHub Actions), data-quality checks, first ML project (e.g. anomaly detection)

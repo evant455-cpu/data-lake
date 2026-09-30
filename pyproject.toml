@@ -3,7 +3,7 @@ name = "datalake"
 version = "0.1.0"
 description = "A personal data lake and warehouse for ocean, astronomy and other science data"
 requires-python = ">=3.11"
-dependencies = ["pyarrow"]
+dependencies = ["pyarrow", "duckdb"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
