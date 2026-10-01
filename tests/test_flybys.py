@@ -111,3 +111,34 @@ def test_past_flybys_also_respect_the_time_window(tmp_path):
     wh = _warehouse(tmp_path, [(1, 100.0, 0.0, 10.0, 0, 0), (2, 100.0, 0.0, 0.4, 0, 0)])  # passed ~1 Myr and ~24 Myr ago
     assert set(_rows(wh, past=True, max_myr=5)) == {1}
     assert set(_rows(wh, past=True, max_myr=50)) == {1, 2}
+
+
+# ---- error bars: shown beside each flyby once the star_errors table exists ----
+
+def _with_errors(tmp_path, stars, errors):
+    """stars as in _warehouse; errors = {source_id: (rv_error, transits)}."""
+    from datalake.connectors import gaia as g
+    wh = _warehouse(tmp_path, stars)
+    lines = ["source_id,radial_velocity_error,rv_nb_transits,pmra_error,pmdec_error"]
+    for sid, (err, n) in errors.items():
+        lines.append(f"{sid},{err},{n},0.05,0.04")
+    raw = land_raw(("\n".join(lines) + "\n").encode(), source="gaia", dataset="star-errors",
+                   filename="e.csv", lake_root=tmp_path)
+    g.process_star_errors_raw(raw, lake_root=tmp_path, warehouse_path=wh)
+    return wh
+
+
+def test_the_report_shows_the_radial_velocity_error_when_we_have_it(tmp_path):
+    wh = _with_errors(tmp_path, [(1, 100.0, 1.0, -10.0, 0, 0), (2, 100.0, 1.0, -10.0, 0, 0)],
+                      {1: (0.4, 20)})  # star 2 has no error row at all
+    text = flybys.flyby_report(wh)
+    assert "rv_err_kms" in text and "rv_transits" in text
+    row1 = next(line for line in text.splitlines() if line.startswith("1 "))
+    assert "0.4" in row1 and "20" in row1
+    assert "(2 rows)" in text  # star 2 is still listed, just with blanks
+
+
+def test_the_report_still_works_without_the_error_table(tmp_path):
+    wh = _warehouse(tmp_path, [(1, 100.0, 1.0, -10.0, 0, 0)])
+    text = flybys.flyby_report(wh)
+    assert "rv_err_kms" not in text and "(1 row)" in text

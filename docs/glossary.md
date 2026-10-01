@@ -134,4 +134,8 @@
 | **AU (astronomical unit)** | The Earth-Sun distance. One parsec is about 206,265 AU. The Sun's comet cloud is thought to reach out to roughly 50,000 to 100,000 AU |
 | **Oort cloud** | A huge, far-out shell of icy bodies around the Sun, where many comets come from |
 | **Straight-line approximation** | Pretending a star moves at constant speed in a straight line. Good for the next million years or so; the galaxy's gravity bends real paths over longer times |
+| **Error bar (margin of error)** | How uncertain a measurement is, in the same units: a radial velocity of -10 km/s with an error of 0.2 is solid, -374 with an error of 80 is not |
+| **rv_nb_transits** | How many times Gaia's telescope passed over a star while measuring its radial velocity. More passes usually means a steadier number |
+| **Dataset (here)** | One kind of table we pull from a source, with its own raw folder, columns and warehouse table. A new dataset leaves the old ones untouched |
+| **Join** | Matching rows of two tables by a shared key (here `source_id`) so each star's measurements and its error bars sit side by side |
 

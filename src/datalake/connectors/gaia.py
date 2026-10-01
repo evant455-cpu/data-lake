@@ -45,6 +45,40 @@ NEARBY_STARS_SCHEMA = {
 }
 NEARBY_STARS_KEY = ("source_id",)
 
+# A second, separate table of ERROR BARS for the same stars (how sure Gaia is of each measurement).
+# Kept apart on purpose: new data = new dataset, so the first table and its raw files never change.
+# It joins to astro.nearby_stars by source_id.
+STAR_ERRORS_SCHEMA = {
+    "source_id": "int",
+    "radial_velocity_error": "float",  # km/s: the margin of error on radial_velocity (null if no radial velocity)
+    "rv_nb_transits": "int",  # how many passes of the telescope the radial velocity is based on (more = steadier)
+    "pmra_error": "float",  # margin of error on proper motion, mas per year
+    "pmdec_error": "float",
+}
+STAR_ERRORS_KEY = ("source_id",)
+STAR_ERRORS_CHECKS = [
+    Check("negative_error", "astro.star_errors",
+          "radial_velocity_error < 0 OR pmra_error < 0 OR pmdec_error < 0", "error",
+          "A margin of error cannot be negative."),
+]
+
+
+@dataclass(frozen=True)
+class GaiaDataset:
+    """One kind of table we pull from Gaia: which columns to ask for and where the result goes."""
+
+    name: str  # raw folder name: lake/raw/gaia/<name>/
+    columns: tuple[str, ...]  # what to SELECT (always starts with source_id)
+    schema: dict  # column -> type, for cleaning
+    key: tuple[str, ...]
+    table: str  # warehouse table inside the astro schema
+
+
+NEARBY_STARS = GaiaDataset(
+    "nearby-stars", tuple(NEARBY_STARS_SCHEMA), NEARBY_STARS_SCHEMA, NEARBY_STARS_KEY, "nearby_stars")
+STAR_ERRORS = GaiaDataset(
+    "star-errors", tuple(STAR_ERRORS_SCHEMA), STAR_ERRORS_SCHEMA, STAR_ERRORS_KEY, "star_errors")
+
 
 # Data-quality rules (Lesson 6). A row matching the condition is flagged, never removed.
 # NOTE: simple rules like these cannot catch a value that is merely WRONG but plausible, e.g. Sirius
@@ -63,7 +97,8 @@ NEARBY_STARS_CHECKS = [
 
 
 def nearby_stars_query(
-    limit: int = 1000, min_parallax_mas: float = 50.0, max_parallax_mas: float | None = None
+    limit: int = 1000, min_parallax_mas: float = 50.0, max_parallax_mas: float | None = None,
+    dataset: GaiaDataset | None = None,
 ) -> str:
     """The ADQL question: the closest well-measured stars, nearest first.
 
@@ -92,8 +127,7 @@ def nearby_stars_query(
             f"reported to cut off silently there. Use a smaller limit."
         )
     return (
-        f"SELECT TOP {limit} source_id, ra, dec, parallax, parallax_error, pmra, pmdec, "
-        "phot_g_mean_mag, bp_rp, radial_velocity "
+        f"SELECT TOP {limit} {', '.join((dataset or NEARBY_STARS).columns)} "
         "FROM gaiadr3.gaia_source "
         f"WHERE parallax > {min_parallax_mas:g}{band} AND parallax_over_error > 10 "
         "ORDER BY parallax DESC"
@@ -139,6 +173,7 @@ def land_nearby_stars(
     min_parallax_mas: float = 50.0,
     max_parallax_mas: float | None = None,
     lake_root: Path = Path("lake"),
+    dataset: GaiaDataset | None = None,
 ) -> GaiaFetch:
     """Fetch the nearest stars and land the CSV untouched in the raw layer.
 
@@ -147,7 +182,8 @@ def land_nearby_stars(
     """
     from datalake.landing import land_raw
 
-    adql = nearby_stars_query(limit, min_parallax_mas, max_parallax_mas)
+    ds = dataset or NEARBY_STARS
+    adql = nearby_stars_query(limit, min_parallax_mas, max_parallax_mas, ds)
     # The file name says which slice it holds, so each band is its own raw file (and never collides).
     band_tag = "" if max_parallax_mas is None else f"_le-{float(max_parallax_mas):g}"
     payload = fetch(adql)
@@ -160,7 +196,7 @@ def land_nearby_stars(
     raw = land_raw(
         payload,
         source="gaia",
-        dataset="nearby-stars",
+        dataset=ds.name,
         filename=f"parallax-gt-{min_parallax_mas:g}{band_tag}_top-{limit}.csv",
         lake_root=lake_root,
     )
@@ -191,9 +227,12 @@ def process_raw(
     lake_root: Path | None = None,
     warehouse_path: Path | None = None,
     schema: str = "astro",
-    table: str = "nearby_stars",
+    table: str | None = None,
+    dataset: GaiaDataset | None = None,
 ) -> GaiaSummary:
     """Clean an already-landed raw CSV and add it to the warehouse table. No network needed."""
+    ds = dataset or NEARBY_STARS
+    table = table or ds.table
     from datalake.cleaning import clean_csv
     from datalake.warehousing import DEFAULT_WAREHOUSE, append_table
 
@@ -204,9 +243,9 @@ def process_raw(
     if not raw_file.exists():
         raise FileNotFoundError(f"Raw file not found: {raw_file}")
 
-    report = clean_csv(raw_file, schema=NEARBY_STARS_SCHEMA, lake_root=lake_root)
+    report = clean_csv(raw_file, schema=ds.schema, lake_root=lake_root)
     res = append_table(
-        report.path, schema=schema, table=table, key=NEARBY_STARS_KEY,
+        report.path, schema=schema, table=table, key=ds.key,
         warehouse_path=warehouse_path or DEFAULT_WAREHOUSE,
     )
     return GaiaSummary(
@@ -225,13 +264,17 @@ def run_nearby_stars_pipeline(
     lake_root: Path = Path("lake"),
     warehouse_path: Path | None = None,
     schema: str = "astro",
-    table: str = "nearby_stars",
+    table: str | None = None,
+    dataset: GaiaDataset | None = None,
 ) -> GaiaSummary:
     """The whole journey in one call: fetch -> raw -> clean -> warehouse."""
     got = land_nearby_stars(
-        fetch, limit=limit, min_parallax_mas=min_parallax_mas, max_parallax_mas=max_parallax_mas, lake_root=lake_root
+        fetch, limit=limit, min_parallax_mas=min_parallax_mas, max_parallax_mas=max_parallax_mas,
+        lake_root=lake_root, dataset=dataset,
     )
-    summary = process_raw(got.path, lake_root=lake_root, warehouse_path=warehouse_path, schema=schema, table=table)
+    summary = process_raw(
+        got.path, lake_root=lake_root, warehouse_path=warehouse_path, schema=schema, table=table, dataset=dataset
+    )
     summary.rows_fetched, summary.complete, summary.warning = got.rows, got.complete, got.warning
     return summary
 
@@ -258,6 +301,11 @@ def summary_lines(r: GaiaSummary) -> list[str]:
     return lines
 
 
+def process_star_errors_raw(raw_file: Path, **kwargs) -> GaiaSummary:
+    """Replay one raw error-bar file into astro.star_errors (this is what `rebuild` calls)."""
+    return process_raw(raw_file, dataset=STAR_ERRORS, **kwargs)
+
+
 def shell_edges_mas(near_pc: float, far_pc: float, step_pc: float) -> list[tuple[float, float]]:
     """Cut the distance range near_pc..far_pc into shells of step_pc, as (near_mas, far_mas) parallax pairs.
 
@@ -275,6 +323,25 @@ def shell_edges_mas(near_pc: float, far_pc: float, step_pc: float) -> list[tuple
     return list(zip(mas[:-1], mas[1:]))
 
 
+def _shell_slices(pcs, *, dataset, limit, fetch, lake_root, warehouse_path) -> list:
+    """One backfill slice per shell between consecutive distances in `pcs` (parsecs)."""
+    from datalake.backfill import Slice, SliceOutcome
+
+    slices = []
+    edges = [(round(1000.0 / a, 4), round(1000.0 / b, 4)) for a, b in zip(pcs[:-1], pcs[1:])]
+    for (near_mas, far_mas), a, b in zip(edges, pcs[:-1], pcs[1:]):
+        def run(near_mas=near_mas, far_mas=far_mas):
+            r = run_nearby_stars_pipeline(
+                fetch, limit=limit, min_parallax_mas=far_mas, max_parallax_mas=near_mas,
+                lake_root=lake_root, warehouse_path=warehouse_path, dataset=dataset,
+            )
+            note = f"{r.rows_fetched} stars: {r.new} new, {r.updated} updated, {r.table_total} total"
+            return SliceOutcome(complete=r.complete, message=note if r.complete else f"{note}. {r.warning}")
+
+        slices.append(Slice(id=f"gaia/{dataset.name}/{a:g}-{b:g}pc", run=run))
+    return slices
+
+
 def band_slices(
     *,
     near_pc: float = 20,
@@ -289,24 +356,30 @@ def band_slices(
 
     A shell that returns exactly `limit` stars is reported incomplete and stays pending: make it thinner.
     """
-    from datalake.backfill import Slice, SliceOutcome
-
     pcs = [near_pc]
     while pcs[-1] + step_pc < far_pc - 1e-9:
         pcs.append(pcs[-1] + step_pc)
     pcs.append(far_pc)
-    slices = []
-    for (near_mas, far_mas), a, b in zip(shell_edges_mas(near_pc, far_pc, step_pc), pcs[:-1], pcs[1:]):
-        def run(near_mas=near_mas, far_mas=far_mas):
-            r = run_nearby_stars_pipeline(
-                fetch, limit=limit, min_parallax_mas=far_mas, max_parallax_mas=near_mas,
-                lake_root=lake_root, warehouse_path=warehouse_path,
-            )
-            note = f"{r.rows_fetched} stars: {r.new} new, {r.updated} updated, {r.table_total} total"
-            return SliceOutcome(complete=r.complete, message=note if r.complete else f"{note}. {r.warning}")
+    return _shell_slices(pcs, dataset=NEARBY_STARS, limit=limit, fetch=fetch,
+                         lake_root=lake_root, warehouse_path=warehouse_path)
 
-        slices.append(Slice(id=f"gaia/nearby-stars/{a:g}-{b:g}pc", run=run))
-    return slices
+
+# Shell edges (parsecs) for the error-bar table. We never fetched the inner sphere shell by shell, so the
+# inner edges are chosen so every shell holds well under 2000 stars (from our star counts: ~315, ~760, ~1550).
+STAR_ERROR_SHELLS_PC = (1, 10, 15, 20, 22, 24, 26, 28, 30)
+
+
+def star_error_slices(
+    *,
+    edges_pc=STAR_ERROR_SHELLS_PC,
+    limit: int = MAX_SYNC_ROWS,
+    fetch=fetch_tap_csv,
+    lake_root: Path = Path("lake"),
+    warehouse_path: Path | None = None,
+) -> list:
+    """Backfill slices that fetch the error bars for the SAME stars as the nearby-stars table."""
+    return _shell_slices(list(edges_pc), dataset=STAR_ERRORS, limit=limit, fetch=fetch,
+                         lake_root=lake_root, warehouse_path=warehouse_path)
 
 
 def main() -> None:

@@ -34,6 +34,7 @@ def _handlers() -> dict:
     return {
         ("gfw", "gap-events"): gfw.process_raw,
         ("gaia", "nearby-stars"): gaia.process_raw,
+        ("gaia", "star-errors"): gaia.process_star_errors_raw,
     }
 
 

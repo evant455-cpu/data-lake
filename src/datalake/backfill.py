@@ -123,7 +123,10 @@ def _plans(lake_root: Path, warehouse_path: Path) -> list[Slice]:
     """Every source's slices, in the order they should be walked. A new source adds one line here."""
     from datalake.connectors import gaia
 
-    return gaia.band_slices(lake_root=lake_root, warehouse_path=warehouse_path)
+    return (
+        gaia.band_slices(lake_root=lake_root, warehouse_path=warehouse_path)
+        + gaia.star_error_slices(lake_root=lake_root, warehouse_path=warehouse_path)
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

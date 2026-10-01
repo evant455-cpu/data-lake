@@ -41,11 +41,15 @@ _MISS_PC = f"({_DIST_PC} * {_V_T} / sqrt(NULLIF({_V_SQ}, 0)))"
 _USABLE = "radial_velocity IS NOT NULL AND pmra IS NOT NULL AND pmdec IS NOT NULL AND parallax > 0"
 
 
-def _all_flybys_sql() -> str:
+def _all_flybys_sql(with_errors: bool = False) -> str:
+    """Every placeable star's flyby. With `with_errors`, also each star's radial-velocity error bar
+    (from astro.star_errors, matched by source_id; stars without a row simply show blanks)."""
+    extra = ", radial_velocity_error AS rv_err_kms, rv_nb_transits AS rv_transits" if with_errors else ""
+    source = "astro.nearby_stars LEFT JOIN astro.star_errors USING (source_id)" if with_errors else "astro.nearby_stars"
     return (
         f"SELECT source_id, {_WHEN_MYR} AS when_myr, {_MISS_PC} AS miss_pc, {_DIST_PC} AS pc_now, "
-        f"{_V_R} AS v_toward_kms, {_V_T} AS v_sideways_kms, phot_g_mean_mag AS g_mag "
-        f"FROM astro.nearby_stars WHERE {_USABLE}"
+        f"{_V_R} AS v_toward_kms, {_V_T} AS v_sideways_kms, phot_g_mean_mag AS g_mag{extra} "
+        f"FROM {source} WHERE {_USABLE}"
     )
 
 
@@ -53,20 +57,25 @@ def _window(max_myr: float, past: bool) -> str:
     return f"when_myr < 0 AND when_myr >= -{float(max_myr)}" if past else f"when_myr > 0 AND when_myr <= {float(max_myr)}"
 
 
-def flyby_sql(top: int = 15, max_myr: float = 5.0, past: bool = False) -> str:
+def flyby_sql(top: int = 15, max_myr: float = 5.0, past: bool = False, with_errors: bool = False) -> str:
     """SQL for the closest flybys inside the time window, closest miss first (numbers not rounded)."""
     if top < 1 or max_myr <= 0:
         raise ValueError("top must be at least 1 and max_myr above 0")
     return (
-        f"SELECT * FROM ({_all_flybys_sql()}) WHERE {_window(max_myr, past)} "
+        f"SELECT * FROM ({_all_flybys_sql(with_errors)}) WHERE {_window(max_myr, past)} "
         f"ORDER BY miss_pc LIMIT {int(top)}"
     )
 
 
 def flyby_report(warehouse_path: Path = DEFAULT_WAREHOUSE, top: int = 15, max_myr: float = 5.0, past: bool = False) -> str:
     """Text report of the closest flybys (read-only)."""
-    sql = flyby_sql(top, max_myr, past)  # validates top and max_myr before touching the warehouse
+    flyby_sql(top, max_myr, past)  # validates top and max_myr before touching the warehouse
     total = query("SELECT count(*) FROM astro.nearby_stars", warehouse_path)[0][0]
+    have_errors = query(
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'astro' AND table_name = 'star_errors'",
+        warehouse_path,
+    )[0][0] > 0
+    sql = flyby_sql(top, max_myr, past, with_errors=have_errors)
     usable, in_window = query(
         f"SELECT count(*), count(*) FILTER (WHERE {_window(max_myr, past)}) FROM ({_all_flybys_sql()})",
         warehouse_path,
@@ -82,7 +91,9 @@ def flyby_report(warehouse_path: Path = DEFAULT_WAREHOUSE, top: int = 15, max_my
         "SELECT source_id, round(when_myr, 3) AS when_myr, round(miss_pc, 3) AS miss_pc, "
         f"round(miss_pc * {AU_PER_PC})::BIGINT AS miss_au, round(pc_now, 1) AS pc_now, "
         "round(v_toward_kms, 1) AS v_toward_kms, round(v_sideways_kms, 1) AS v_sideways_kms, "
-        f"round(g_mag, 1) AS g_mag FROM ({sql})",
+        "round(g_mag, 1) AS g_mag"
+        + (", round(rv_err_kms, 2) AS rv_err_kms, rv_transits" if have_errors else "")
+        + f" FROM ({sql})",
         warehouse_path, max_rows=top,
     )
     return head + table

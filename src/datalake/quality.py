@@ -96,10 +96,10 @@ def report_lines(results: list[CheckResult]) -> list[str]:
 
 def all_checks() -> list[Check]:
     """Every source's rules. Imported here (not at the top) so sources can import Check from this file."""
-    from datalake.connectors.gaia import NEARBY_STARS_CHECKS
+    from datalake.connectors.gaia import NEARBY_STARS_CHECKS, STAR_ERRORS_CHECKS
     from datalake.connectors.gfw import GAP_EVENT_CHECKS
 
-    return GAP_EVENT_CHECKS + NEARBY_STARS_CHECKS
+    return GAP_EVENT_CHECKS + NEARBY_STARS_CHECKS + STAR_ERRORS_CHECKS
 
 
 def main(argv: list[str] | None = None) -> int:

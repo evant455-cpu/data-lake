@@ -141,3 +141,17 @@ time = -d x v_r / (v_r^2 + v_t^2), miss = d x v_t / sqrt(v_r^2 + v_t^2). Options
 (default 5 million years), `--past` (stars that already passed). Only stars with a radial velocity can be placed.
 No uncertainties yet, so treat results as leads, not facts.
 
+## Error bars for the stars (a second Gaia table)
+
+`astro.star_errors` holds Gaia's margins of error for the same stars as `astro.nearby_stars`: `radial_velocity_error`
+(km/s), `rv_nb_transits` (how many telescope passes the radial velocity rests on), `pmra_error` and `pmdec_error`.
+It is a separate dataset on purpose, so the first table and its raw files never change. The backfill queue
+walks it shell by shell (8 slices, ids `gaia/star-errors/...`):
+
+    python -m datalake.backfill --status
+    python -m datalake.backfill --max-slices 8
+
+When the table exists, `python -m datalake.flybys` adds `rv_err_kms` and `rv_transits` beside each flyby, so a
+suspicious radial velocity can be judged against its own margin of error. Join the tables yourself with
+`... FROM astro.nearby_stars JOIN astro.star_errors USING (source_id)`.
+
