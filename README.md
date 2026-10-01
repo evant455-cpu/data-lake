@@ -126,3 +126,10 @@ remembering which are done in `lake/state/backfill.json`. Right now the slices a
 A slice counts as done only if its fetch was complete. A shell that hits the row limit, or any crash, stops
 the run, stays pending, and exits with code 2. If a shell is cut off, it holds too many stars and needs to
 be made thinner. Running the same slice twice on one day is refused (raw is never overwritten); try again tomorrow.
+
+## Fast-moving stars
+
+`python -m datalake.motion` turns each star's drift across the sky into a real speed (km/s) and lists the fastest,
+with the median speed for comparison. Formula: speed = 4.74047 x proper motion (mas/yr) / parallax (mas). It is the
+sideways (tangential) part only, relative to the Sun. Read-only; use `--top N` for a longer list.
+
