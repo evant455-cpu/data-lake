@@ -100,6 +100,12 @@ Most known planets orbit stars farther than our 30 pc sample, so only a short li
 Radial Velocity planets `pl_bmasse` is a minimum mass.
 Data: NASA Exoplanet Archive, operated by Caltech/IPAC under contract with NASA. Please credit it.
 
+Hosts without a Gaia number: fetch the host positions once (`python -m datalake.connectors.exoplanets --positions`,
+a separate dataset -> `astro.exoplanet_positions`), then `python -m datalake.planet_hosts` matches every planet to our
+stars: by Gaia number first, else by sky position within 10 arcsec (`--radius`), checking where each star was in both
+2016 (Gaia) and 2000 (the archive does not say which year its positions are for). Read-only; position matches are
+listed for a person to check, with a note when more than one star was inside the radius.
+
 ## Data-quality checks
 
 ```

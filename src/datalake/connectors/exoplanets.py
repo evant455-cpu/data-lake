@@ -56,6 +56,33 @@ EXOPLANET_COLUMNS = {
 }
 EXOPLANET_KEY = ("pl_name",)
 
+# A second, separate dataset: WHERE each host star is on the sky. Needed because some hosts have no Gaia number,
+# so the only way to find them among our stars is by position. Kept apart on purpose (like Gaia's error bars):
+# new data = new dataset, so the first planet table and its raw files never change and rebuild keeps working.
+# The archive does not document which date (epoch) these positions are for; datalake.planet_hosts allows for both
+# 2000 and 2016.
+HOST_POSITION_COLUMNS = {
+    "pl_name": "string",
+    "hostname": "string",
+    "ra": "float",  # right ascension of the system, degrees
+    "dec": "float",  # declination of the system, degrees
+}
+
+
+@dataclass(frozen=True)
+class ExoplanetDataset:
+    """One kind of table we pull from the archive: which columns, and where the result goes."""
+
+    name: str  # raw folder name: lake/raw/exoplanets/<name>/
+    columns: dict  # column -> type, for cleaning (always starts with pl_name, the key)
+    table: str  # warehouse table inside the astro schema
+    filename: str  # raw file name
+
+
+PLANETS = ExoplanetDataset(DATASET, EXOPLANET_COLUMNS, TABLE, f"{ARCHIVE_TABLE}.csv")
+HOST_POSITIONS = ExoplanetDataset("host-positions", HOST_POSITION_COLUMNS, "exoplanet_positions",
+                                  f"{ARCHIVE_TABLE}_positions.csv")
+
 # The text "Gaia DR3 4472832130942575872" -> the number 4472832130942575872 (null if there is no number at the end).
 # This is SQL text to drop into a question, e.g.:  JOIN astro.nearby_stars s ON s.source_id = {GAIA_SOURCE_ID_SQL}
 GAIA_SOURCE_ID_SQL = r"TRY_CAST(NULLIF(regexp_extract(gaia_dr3_id, '([0-9]+)\s*$', 1), '') AS BIGINT)"
@@ -69,15 +96,15 @@ EXOPLANET_CHECKS = [
     Check("non_positive_size", "astro.exoplanets", "pl_rade <= 0 OR pl_bmasse <= 0", "error",
           "A planet's radius and mass must be above zero."),
     Check("no_gaia_id", "astro.exoplanets", "gaia_dr3_id IS NULL", "warning",
-          "No Gaia number for the host star, so this planet cannot be matched to our star table."),
+          "No Gaia number for the host star: it can only be matched to our stars by sky position (datalake.planet_hosts)."),
     Check("unreadable_gaia_id", "astro.exoplanets", f"gaia_dr3_id IS NOT NULL AND {GAIA_SOURCE_ID_SQL} IS NULL", "warning",
           "The Gaia number is not in the form we expect, so the link to our stars will miss this planet."),
 ]
 
 
-def exoplanets_query() -> str:
-    """The question: every planet, our columns. No row limit: we check the count afterwards instead."""
-    return f"SELECT {', '.join(EXOPLANET_COLUMNS)} FROM {ARCHIVE_TABLE} ORDER BY pl_name"
+def exoplanets_query(dataset: ExoplanetDataset | None = None) -> str:
+    """The question: every planet, this dataset's columns. No row limit: we check the count afterwards instead."""
+    return f"SELECT {', '.join((dataset or PLANETS).columns)} FROM {ARCHIVE_TABLE} ORDER BY pl_name"
 
 
 def count_query() -> str:
@@ -123,7 +150,9 @@ def _expected_count(payload: bytes) -> int | None:
         return None
 
 
-def land_exoplanets(fetch=fetch_tap_csv, *, lake_root: Path = Path("lake")) -> ExoplanetFetch:
+def land_exoplanets(
+    fetch=fetch_tap_csv, *, lake_root: Path = Path("lake"), dataset: ExoplanetDataset | None = None
+) -> ExoplanetFetch:
     """Fetch every confirmed planet and land the CSV untouched in the raw layer.
 
     `fetch` takes the question text and returns bytes. It is passed in (like the other connectors) so tests
@@ -131,7 +160,8 @@ def land_exoplanets(fetch=fetch_tap_csv, *, lake_root: Path = Path("lake")) -> E
     """
     from datalake.landing import land_raw
 
-    payload = fetch(exoplanets_query())
+    ds = dataset or PLANETS
+    payload = fetch(exoplanets_query(ds))
     rows = _count_rows(payload)  # raises before anything is landed if the reply is not a table
     expected = _expected_count(fetch(count_query()))
     if expected is None:
@@ -141,7 +171,7 @@ def land_exoplanets(fetch=fetch_tap_csv, *, lake_root: Path = Path("lake")) -> E
     else:
         complete, warning = True, None  # more rows than the count = a planet was added in between: fine
     raw = land_raw(
-        payload, source=SOURCE, dataset=DATASET, filename=f"{ARCHIVE_TABLE}.csv", lake_root=lake_root,
+        payload, source=SOURCE, dataset=ds.name, filename=ds.filename, lake_root=lake_root,
         extra_meta={"complete": complete, "expected_rows": expected},
     )
     return ExoplanetFetch(path=raw, rows=rows, complete=complete, warning=warning, expected_rows=expected)
@@ -171,9 +201,12 @@ def process_raw(
     lake_root: Path | None = None,
     warehouse_path: Path | None = None,
     schema: str = "astro",
-    table: str = TABLE,
+    table: str | None = None,
+    dataset: ExoplanetDataset | None = None,
 ) -> ExoplanetSummary:
     """Clean an already-landed raw CSV and add it to the warehouse table. No network needed."""
+    ds = dataset or PLANETS
+    table = table or ds.table
     from datalake.cleaning import clean_csv
     from datalake.warehousing import DEFAULT_WAREHOUSE, append_table
 
@@ -184,7 +217,7 @@ def process_raw(
     if not raw_file.exists():
         raise FileNotFoundError(f"Raw file not found: {raw_file}")
 
-    report = clean_csv(raw_file, schema=EXOPLANET_COLUMNS, lake_root=lake_root)
+    report = clean_csv(raw_file, schema=ds.columns, lake_root=lake_root)
     res = append_table(
         report.path, schema=schema, table=table, key=EXOPLANET_KEY,
         warehouse_path=warehouse_path or DEFAULT_WAREHOUSE,
@@ -201,10 +234,11 @@ def run_exoplanet_pipeline(
     *,
     lake_root: Path = Path("lake"),
     warehouse_path: Path | None = None,
+    dataset: ExoplanetDataset | None = None,
 ) -> ExoplanetSummary:
     """The whole journey in one call: fetch -> raw -> clean -> warehouse."""
-    got = land_exoplanets(fetch, lake_root=lake_root)
-    summary = process_raw(got.path, lake_root=lake_root, warehouse_path=warehouse_path)
+    got = land_exoplanets(fetch, lake_root=lake_root, dataset=dataset)
+    summary = process_raw(got.path, lake_root=lake_root, warehouse_path=warehouse_path, dataset=dataset)
     summary.rows_fetched, summary.complete, summary.warning = got.rows, got.complete, got.warning
     return summary
 
@@ -226,29 +260,38 @@ def summary_lines(r: ExoplanetSummary) -> list[str]:
                      f"{r.duplicates_in_file} repeated inside the file")
     bad = {k: v for k, v in r.bad_values.items() if v}
     lines.append(f"Values that did not fit their type: {bad or 'none'}")
-    lines.append('Try: python -m datalake.warehousing "SELECT count(*) FROM astro.exoplanets"')
+    lines.append(f'Try: python -m datalake.warehousing "SELECT count(*) FROM {r.table}"')
     lines.append("Data: NASA Exoplanet Archive (Caltech/IPAC)")
     return lines
+
+
+def process_positions_raw(raw_file: Path, **kwargs) -> ExoplanetSummary:
+    """Replay one raw host-positions file into astro.exoplanet_positions (this is what `rebuild` calls)."""
+    return process_raw(raw_file, dataset=HOST_POSITIONS, **kwargs)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Command line.
 
     Fetch + clean + load:  python -m datalake.connectors.exoplanets
-    Re-clean a raw file:   python -m datalake.connectors.exoplanets --raw PATH_TO_RAW_CSV
+    Host star positions:   python -m datalake.connectors.exoplanets --positions
+    Re-clean a raw file:   python -m datalake.connectors.exoplanets --raw PATH_TO_RAW_CSV  (add --positions for a positions file)
     Exit code 2 if the fetch could not be shown to be complete (so a scheduled run can flag it).
     """
     import argparse
 
     p = argparse.ArgumentParser(description="NASA Exoplanet Archive confirmed planets: raw -> clean -> warehouse.")
     p.add_argument("--raw", help="Skip fetching: clean and load this existing raw CSV (no network needed).")
+    p.add_argument("--positions", action="store_true",
+                   help="the host-positions dataset (sky positions, for matching hosts without a Gaia number)")
     a = p.parse_args(argv)
+    ds = HOST_POSITIONS if a.positions else PLANETS
 
     if a.raw:
-        r = process_raw(Path(a.raw))
+        r = process_raw(Path(a.raw), dataset=ds)
     else:
         try:
-            r = run_exoplanet_pipeline()
+            r = run_exoplanet_pipeline(dataset=ds) if a.positions else run_exoplanet_pipeline()
         except FileExistsError as e:
             raise SystemExit(
                 f"Already fetched today, raw data is never overwritten.\n{e}\n"

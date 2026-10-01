@@ -36,6 +36,7 @@ def _handlers() -> dict:
         ("gaia", "nearby-stars"): gaia.process_raw,
         ("gaia", "star-errors"): gaia.process_star_errors_raw,
         ("exoplanets", "planets"): exoplanets.process_raw,
+        ("exoplanets", "host-positions"): exoplanets.process_positions_raw,
     }
 
 

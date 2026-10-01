@@ -159,3 +159,6 @@
 | **Logistic regression** | A simple classifier: a weighted sum of the features, squeezed into a probability between 0 and 1. Easy to inspect, a good first model |
 | **Gradient boosting** | A stronger but harder-to-inspect classifier that builds many small decision trees, each fixing the last one's mistakes |
 | **scikit-learn** | The standard Python library for classic machine learning (models, cross-validation, scores). Install with `pip install scikit-learn` |
+| **Epoch (of a position)** | The date a sky position is for. Stars move, so a position needs a date: Gaia DR3 positions are for 2016, many catalogues use 2000 |
+| **Cross-match** | Finding the same star in two catalogues. Best by a shared ID; otherwise by sky position, within a small radius |
+| **Match radius** | How close (in arcseconds) two catalogue positions must be to count as the same star. Too big catches neighbours, too small misses real matches |
