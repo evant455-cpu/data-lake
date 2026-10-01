@@ -150,3 +150,43 @@ def test_summary_warns_loudly_when_incomplete(tmp_path):
 def test_schema_covers_expected_columns_and_key():
     assert "source_id" in NEARBY_STARS_SCHEMA and NEARBY_STARS_SCHEMA["source_id"] == "int"
     assert json.dumps(sorted(NEARBY_STARS_SCHEMA)).count("radial_velocity") == 1
+
+
+# ---- distance bands: fetch a slice of the sky shell by shell, each under the row limit ----
+
+def test_band_adds_an_upper_parallax_bound_and_no_band_means_no_bound():
+    plain = nearby_stars_query(limit=10)
+    band = nearby_stars_query(limit=10, min_parallax_mas=50, max_parallax_mas=54.74)
+    assert "parallax <=" not in plain
+    assert "parallax > 50" in band and "parallax <= 54.74" in band
+
+
+def test_band_must_have_max_above_min_and_plain_numbers():
+    with pytest.raises(ValueError, match="above"):
+        nearby_stars_query(limit=10, min_parallax_mas=50, max_parallax_mas=50)
+    with pytest.raises(ValueError, match="above"):
+        nearby_stars_query(limit=10, min_parallax_mas=50, max_parallax_mas=40)
+    with pytest.raises(ValueError):
+        nearby_stars_query(limit=10, max_parallax_mas="55; DROP TABLE x")
+
+
+def test_each_band_lands_in_its_own_raw_file_even_on_the_same_day(tmp_path):
+    _, whole = _land(tmp_path, _csv((1, 60, 1)))
+    _, band = _land(tmp_path, _csv((2, 52, 1)), max_parallax_mas=54.74)
+    _, other = _land(tmp_path, _csv((3, 56, 1)), min_parallax_mas=54.74, max_parallax_mas=60)
+    assert len({whole.path.name, band.path.name, other.path.name}) == 3
+    assert "54.74" in band.path.name  # the file name says which slice it holds
+
+
+def test_a_band_under_the_limit_completes_and_overlap_is_harmless(tmp_path):
+    from datalake.warehousing import query
+
+    wh = tmp_path / "wh.duckdb"
+    _run(tmp_path, _csv((1, 768.5, 10.1), (2, 54.7359, 5.0)), wh, limit=2)  # hit its limit: incomplete
+    tap = FakeTap(_csv((2, 54.7359, 5.0), (3, 52.0, 1.0), (4, 50.5, 2.0)))  # band 50..54.74, overlaps star 2
+    s = run_nearby_stars_pipeline(tap, limit=1000, min_parallax_mas=50, max_parallax_mas=54.74,
+                                  lake_root=tmp_path, warehouse_path=wh)
+    assert s.complete and s.warning is None
+    assert (s.new, s.updated, s.table_total) == (2, 1, 4)
+    assert "parallax <= 54.74" in tap.queries[0]
+    assert query("SELECT count(*) FROM astro.nearby_stars", wh) == [(4,)]

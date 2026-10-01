@@ -73,6 +73,11 @@ raw, cleans it, and loads `astro.nearby_stars` in the same warehouse file as the
 Ask it something: `python -m datalake.warehousing "SELECT source_id, parallax, phot_g_mean_mag FROM astro.nearby_stars ORDER BY parallax DESC LIMIT 5"`.
 If you get exactly the limit, the output starts with `WARNING: INCOMPLETE FETCH` (the archive's quick queries
 are reported to cut off silently at 2000 rows, so the limit cannot go above that).
+Past 2000 stars, fetch one distance band at a time with `--min-parallax` and `--max-parallax`, for example
+`python -m datalake.connectors.gaia --min-parallax 50 --max-parallax 54.74 --limit 2000`
+(stars with a parallax above 50 and at most 54.74 mas). Each band is its own raw file; make bands overlap a hair,
+because the upsert (key `source_id`) quietly replaces repeats. A band that comes back under the limit has no warning,
+which proves it is complete.
 Same rules as GFW: raw is never overwritten; `--raw PATH` re-cleans a file without the network.
 Data: ESA Gaia DR3 (ESA/Gaia/DPAC).
 

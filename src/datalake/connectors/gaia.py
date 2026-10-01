@@ -62,15 +62,28 @@ NEARBY_STARS_CHECKS = [
 ]
 
 
-def nearby_stars_query(limit: int = 1000, min_parallax_mas: float = 50.0) -> str:
+def nearby_stars_query(
+    limit: int = 1000, min_parallax_mas: float = 50.0, max_parallax_mas: float | None = None
+) -> str:
     """The ADQL question: the closest well-measured stars, nearest first.
 
     parallax > 50 mas means closer than 20 parsecs (about 65 light-years). `parallax_over_error > 10`
     keeps only stars whose distance is measured to better than 10%.
+    `max_parallax_mas` (optional) closes the far side of a "band": a shell of space between two distances.
+    Fetching shell by shell keeps each answer under the row limit. A big parallax is a close star, so the
+    band is "parallax above min and at most max".
     Values go into the text, so they must be plain numbers (checked here).
     """
     limit = int(limit)
     min_parallax_mas = float(min_parallax_mas)
+    band = ""
+    if max_parallax_mas is not None:
+        max_parallax_mas = float(max_parallax_mas)
+        if max_parallax_mas <= min_parallax_mas:
+            raise ValueError(
+                f"max parallax ({max_parallax_mas:g}) must be above min parallax ({min_parallax_mas:g})"
+            )
+        band = f" AND parallax <= {max_parallax_mas:g}"
     if limit < 1:
         raise ValueError("limit must be at least 1")
     if limit > MAX_SYNC_ROWS:
@@ -82,7 +95,7 @@ def nearby_stars_query(limit: int = 1000, min_parallax_mas: float = 50.0) -> str
         f"SELECT TOP {limit} source_id, ra, dec, parallax, parallax_error, pmra, pmdec, "
         "phot_g_mean_mag, bp_rp, radial_velocity "
         "FROM gaiadr3.gaia_source "
-        f"WHERE parallax > {min_parallax_mas:g} AND parallax_over_error > 10 "
+        f"WHERE parallax > {min_parallax_mas:g}{band} AND parallax_over_error > 10 "
         "ORDER BY parallax DESC"
     )
 
@@ -124,6 +137,7 @@ def land_nearby_stars(
     *,
     limit: int = 1000,
     min_parallax_mas: float = 50.0,
+    max_parallax_mas: float | None = None,
     lake_root: Path = Path("lake"),
 ) -> GaiaFetch:
     """Fetch the nearest stars and land the CSV untouched in the raw layer.
@@ -133,19 +147,21 @@ def land_nearby_stars(
     """
     from datalake.landing import land_raw
 
-    adql = nearby_stars_query(limit, min_parallax_mas)
+    adql = nearby_stars_query(limit, min_parallax_mas, max_parallax_mas)
+    # The file name says which slice it holds, so each band is its own raw file (and never collides).
+    band_tag = "" if max_parallax_mas is None else f"_le-{float(max_parallax_mas):g}"
     payload = fetch(adql)
     rows = _count_rows(payload)  # raises before anything is landed if the reply is not a table
     complete = rows < limit
     warning = None if complete else (
         f"Got exactly the limit ({limit} rows), so there may be more stars. "
-        "Raise the limit (max 2000) or narrow the question, for example a higher min parallax."
+        "Raise the limit (max 2000) or narrow the question, for example a thinner band (--max-parallax)."
     )
     raw = land_raw(
         payload,
         source="gaia",
         dataset="nearby-stars",
-        filename=f"parallax-gt-{min_parallax_mas:g}_top-{limit}.csv",
+        filename=f"parallax-gt-{min_parallax_mas:g}{band_tag}_top-{limit}.csv",
         lake_root=lake_root,
     )
     return GaiaFetch(path=raw, rows=rows, complete=complete, warning=warning)
@@ -205,13 +221,16 @@ def run_nearby_stars_pipeline(
     *,
     limit: int = 1000,
     min_parallax_mas: float = 50.0,
+    max_parallax_mas: float | None = None,
     lake_root: Path = Path("lake"),
     warehouse_path: Path | None = None,
     schema: str = "astro",
     table: str = "nearby_stars",
 ) -> GaiaSummary:
     """The whole journey in one call: fetch -> raw -> clean -> warehouse."""
-    got = land_nearby_stars(fetch, limit=limit, min_parallax_mas=min_parallax_mas, lake_root=lake_root)
+    got = land_nearby_stars(
+        fetch, limit=limit, min_parallax_mas=min_parallax_mas, max_parallax_mas=max_parallax_mas, lake_root=lake_root
+    )
     summary = process_raw(got.path, lake_root=lake_root, warehouse_path=warehouse_path, schema=schema, table=table)
     summary.rows_fetched, summary.complete, summary.warning = got.rows, got.complete, got.warning
     return summary
@@ -242,7 +261,7 @@ def summary_lines(r: GaiaSummary) -> list[str]:
 def main() -> None:
     """Command line.
 
-    Fetch + clean + load:  python -m datalake.connectors.gaia [--limit N] [--min-parallax MAS]
+    Fetch + clean + load:  python -m datalake.connectors.gaia [--limit N] [--min-parallax MAS] [--max-parallax MAS]
     Re-clean a raw file:   python -m datalake.connectors.gaia --raw PATH_TO_RAW_CSV
     """
     import argparse
@@ -250,6 +269,8 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Gaia DR3 nearest stars: raw -> clean -> warehouse.")
     p.add_argument("--limit", type=int, default=1000, help="most stars to fetch (max 2000)")
     p.add_argument("--min-parallax", type=float, default=50.0, help="parallax in mas; 50 = closer than 20 parsecs")
+    p.add_argument("--max-parallax", type=float, default=None,
+                   help="far edge of a band in mas (use with --min-parallax): fetches only the shell between them")
     p.add_argument("--raw", help="Skip fetching: clean and load this existing raw CSV (no network needed).")
     a = p.parse_args()
 
@@ -257,7 +278,9 @@ def main() -> None:
         r = process_raw(Path(a.raw))
     else:
         try:
-            r = run_nearby_stars_pipeline(limit=a.limit, min_parallax_mas=a.min_parallax)
+            r = run_nearby_stars_pipeline(
+                limit=a.limit, min_parallax_mas=a.min_parallax, max_parallax_mas=a.max_parallax
+            )
         except FileExistsError as e:
             raise SystemExit(
                 f"Already fetched today with these settings, raw data is never overwritten.\n{e}\n"

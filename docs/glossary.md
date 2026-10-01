@@ -108,4 +108,6 @@
 | **Plausible but wrong** | A value inside every allowed range that is still false (Sirius showing a brightness of 8.5); simple rules miss these, comparing columns can catch them |
 | **Mean (average) vs median** | Mean = add everything up and divide; median = the middle value when sorted. A few huge values drag the mean up but barely move the median |
 | **Robust statistic** | A summary that stays honest when outliers are present; the median is robust, the mean is not |
+| **Band (shell)** | A slice of space between two distances (here, between two parallax values); fetching band by band keeps every answer under the row limit |
+| **Overlap on purpose** | Letting neighbouring slices share an edge so nothing falls in the crack; the upsert makes the repeats harmless |
 
