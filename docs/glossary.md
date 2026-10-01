@@ -79,3 +79,6 @@
 | **Window function** | SQL that looks at a row together with its group, e.g. "how many rows share this vessel and start time?" |
 | **Glob (wildcard)** | A pattern like `*.parquet` that matches many files at once |
 | **Duplicate vs different record** | Two rows sharing a key might be true copies or genuinely different events; check before assuming |
+| **True duplicate** | Two records identical in every field; safe to collapse into one |
+| **Overlap (date window)** | An event counts as inside a date range if any part of it overlaps the range, so an event can start before and end after the window |
+| **Outlier** | A value far outside the normal range (a 3.7-year gap among gaps measured in hours or days); it can distort averages and models |
