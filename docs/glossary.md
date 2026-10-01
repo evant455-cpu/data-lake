@@ -126,8 +126,6 @@
 | **Shell (Gaia)** | The stars between two distances, like the layer of an onion; its edges are shared with the next shell so nothing is missed or counted twice |
 | **State file** | A small file that remembers where a job got to between runs (`lake/state/backfill.json`) |
 | **Throttle** | Deliberately limiting how much one run does (default one slice), to stay under rate limits and keep each run small |
-| **Proper motion** | How fast a star drifts across the sky, as an angle (milliarcseconds per year). Not a speed: close stars show large proper motion just because they are close |
 | **Tangential speed** | The real sideways speed of a star in km/s: 4.74047 x proper motion (mas/yr) / parallax (mas). The conversion constant is how many km/s one arcsecond per year is at one parsec |
-| **Radial velocity** | The part of a star's motion toward or away from us (km/s), measured from the Doppler shift of its light. Many of our stars have none |
 | **Relative to the Sun** | Speeds measured from where we are, so they include the Sun's own motion through the galaxy; fine for ranking, not the star's "true" speed |
 
