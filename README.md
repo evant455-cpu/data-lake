@@ -113,3 +113,16 @@ loads the rebuilt warehouse, then reports each table as `identical` or `DIFFEREN
 An existing warehouse is never overwritten unless you add `--replace`; the new one is built beside it and swapped
 in only if every file worked. Raw files are only read. Raw files of a source it does not know yet are skipped with a note.
 
+## Backfill queue: walk big jobs one slice at a time
+
+Some data is too big for one request. The backfill queue cuts a job into slices and does one per run,
+remembering which are done in `lake/state/backfill.json`. Right now the slices are Gaia distance shells,
+20 to 30 parsecs in steps of 2 (the closer 20 pc sphere is already complete).
+
+    python -m datalake.backfill --status      # lists done / pending, changes nothing
+    python -m datalake.backfill               # runs the next pending slice (one per run)
+    python -m datalake.backfill --max-slices 3
+
+A slice counts as done only if its fetch was complete. A shell that hits the row limit, or any crash, stops
+the run, stays pending, and exits with code 2. If a shell is cut off, it holds too many stars and needs to
+be made thinner. Running the same slice twice on one day is refused (raw is never overwritten); try again tomorrow.

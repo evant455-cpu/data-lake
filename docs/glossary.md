@@ -120,4 +120,9 @@
 | **Overlap window** | Deliberately re-asking for the last few days, because sources add and revise recent records late; the upsert makes the repeats harmless |
 | **Catch-up (throttle)** | When far behind, covering only a limited window per run and continuing next run, so no single run is huge |
 | **Exit code 2 (here)** | Our signal for "finished, but the fetch may be incomplete", so a scheduled job can fail visibly instead of looking fine |
-
+| **Backfill** | Filling in older data after the fact, as opposed to fetching only what is new |
+| **Slice** | One small piece of a big job (a distance shell, a date window), sized so it can be fetched completely |
+| **Queue (here)** | The ordered list of slices plus a saved record of which are done, so each run continues where the last stopped |
+| **Shell (Gaia)** | The stars between two distances, like the layer of an onion; its edges are shared with the next shell so nothing is missed or counted twice |
+| **State file** | A small file that remembers where a job got to between runs (`lake/state/backfill.json`) |
+| **Throttle** | Deliberately limiting how much one run does (default one slice), to stay under rate limits and keep each run small |

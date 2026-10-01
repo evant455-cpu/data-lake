@@ -258,6 +258,57 @@ def summary_lines(r: GaiaSummary) -> list[str]:
     return lines
 
 
+def shell_edges_mas(near_pc: float, far_pc: float, step_pc: float) -> list[tuple[float, float]]:
+    """Cut the distance range near_pc..far_pc into shells of step_pc, as (near_mas, far_mas) parallax pairs.
+
+    Parallax in mas is 1000 / distance in parsecs, so a NEARER edge is a BIGGER parallax. Every edge is
+    computed once and rounded the same way, so one shell's far edge is exactly the next shell's near edge:
+    no star falls in a gap and none is counted twice.
+    """
+    if not (0 < near_pc < far_pc) or step_pc <= 0:
+        raise ValueError("Need 0 < near_pc < far_pc and step_pc > 0.")
+    pcs = [near_pc]
+    while pcs[-1] + step_pc < far_pc - 1e-9:
+        pcs.append(pcs[-1] + step_pc)
+    pcs.append(far_pc)
+    mas = [round(1000.0 / pc, 4) for pc in pcs]
+    return list(zip(mas[:-1], mas[1:]))
+
+
+def band_slices(
+    *,
+    near_pc: float = 20,
+    far_pc: float = 30,
+    step_pc: float = 2,
+    limit: int = MAX_SYNC_ROWS,
+    fetch=fetch_tap_csv,
+    lake_root: Path = Path("lake"),
+    warehouse_path: Path | None = None,
+) -> list:
+    """One backfill slice per distance shell (see datalake.backfill). 20 pc is where our complete sphere ends.
+
+    A shell that returns exactly `limit` stars is reported incomplete and stays pending: make it thinner.
+    """
+    from datalake.backfill import Slice, SliceOutcome
+
+    pcs = [near_pc]
+    while pcs[-1] + step_pc < far_pc - 1e-9:
+        pcs.append(pcs[-1] + step_pc)
+    pcs.append(far_pc)
+    slices = []
+    for (near_mas, far_mas), a, b in zip(shell_edges_mas(near_pc, far_pc, step_pc), pcs[:-1], pcs[1:]):
+        def run(near_mas=near_mas, far_mas=far_mas):
+            r = run_nearby_stars_pipeline(
+                fetch, limit=limit, min_parallax_mas=far_mas, max_parallax_mas=near_mas,
+                lake_root=lake_root, warehouse_path=warehouse_path,
+            )
+            note = f"{r.rows_fetched} stars: {r.new} new, {r.updated} updated, {r.table_total} total"
+            return SliceOutcome(complete=r.complete, message=note if r.complete else f"{note}. {r.warning}")
+
+        slices.append(Slice(id=f"gaia/nearby-stars/{a:g}-{b:g}pc", run=run))
+    return slices
+
+
 def main() -> None:
     """Command line.
 
