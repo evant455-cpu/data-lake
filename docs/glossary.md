@@ -115,4 +115,9 @@
 | **Swap (build beside, then replace)** | Build the new file under a temporary name and rename it into place only once it is complete, so a failure never leaves a half-built file |
 | **Sidecar (.meta.json)** | The small file next to each raw file recording where it came from, when it was fetched and its checksum; the rebuild reads the fetch time from it |
 | **EXCEPT (SQL)** | "Rows in this table that are not in that one"; run both ways, it proves two tables hold the same rows |
+| **Incremental fetch** | Fetching only what is new since last time instead of everything again |
+| **Watermark** | A marker for how far we have already collected; here, the latest end date of a complete fetch for a region |
+| **Overlap window** | Deliberately re-asking for the last few days, because sources add and revise recent records late; the upsert makes the repeats harmless |
+| **Catch-up (throttle)** | When far behind, covering only a limited window per run and continuing next run, so no single run is huge |
+| **Exit code 2 (here)** | Our signal for "finished, but the fetch may be incomplete", so a scheduled job can fail visibly instead of looking fine |
 

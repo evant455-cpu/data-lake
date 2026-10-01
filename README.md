@@ -52,6 +52,11 @@ Each run is ADDED to `ocean.gap_events`: an event already in the table (same ves
 is replaced by the newer copy, anything else is added. The third output line shows how many were new,
 updated, and the table total. Each row's `_source_file` column says which fetch it came from.
 Re-running the same file is harmless (it reports 0 new, N updated).
+Since last time: `python -m datalake.connectors.gfw --incremental` fetches only what is new. It finds the latest end date
+of a COMPLETE fetch for the region (read from the raw file names and sidecars), backs up 7 days (`--overlap-days`, because
+GFW adds and revises events late), and fetches at most 90 days (`--max-days`). Far behind, each run catches up one window
+and the next run continues; up to date, it says so and makes no requests. The very first run needs `--since YYYY-MM-DD`.
+A cut-off fetch never moves the start forward, and exits with code 2 so automation can stop and tell you.
 Paging: GFW sends at most 100 events per request, so the fetch keeps asking for the next page until a
 page comes back short or empty (capped at 50 pages). If the fetch might be incomplete (page cap hit, or GFW
 seems to ignore the page offset) the output starts with a `WARNING: INCOMPLETE FETCH` line; what was fetched

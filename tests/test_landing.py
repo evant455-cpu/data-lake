@@ -26,3 +26,11 @@ def test_never_overwrites_raw(tmp_path):
     land_raw(b"1", source="s", dataset="d", filename="f", lake_root=tmp_path, now=WHEN)
     with pytest.raises(FileExistsError):
         land_raw(b"2", source="s", dataset="d", filename="f", lake_root=tmp_path, now=WHEN)
+
+
+def test_extra_meta_is_recorded_but_cannot_overwrite_core_fields(tmp_path):
+    p = land_raw(b"abc", source="s", dataset="d", filename="f", lake_root=tmp_path, now=WHEN,
+                 extra_meta={"complete": False, "rows": 7, "sha256": "forged"})
+    meta = json.loads((p.parent / "f.meta.json").read_text())
+    assert meta["complete"] is False and meta["rows"] == 7
+    assert meta["sha256"] == hashlib.sha256(b"abc").hexdigest()  # the real checksum wins

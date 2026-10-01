@@ -19,12 +19,15 @@ def land_raw(
     filename: str,
     lake_root: Path = Path("lake"),
     now: datetime | None = None,
+    extra_meta: dict | None = None,
 ) -> Path:
     """Save raw bytes under lake/raw/<source>/<dataset>/<YYYY-MM-DD>/<filename>.
 
     Also writes a small sidecar file, <filename>.meta.json, recording where the
     data came from, when we fetched it, and a checksum (a fingerprint of the
     bytes, so we can later prove the file was not changed).
+    `extra_meta` adds more provenance to the sidecar (for example whether a fetch was complete);
+    it can never replace the core fields, so the checksum always stays the real one.
     Returns the path of the saved file. Refuses to overwrite an existing file.
     """
     now = now or datetime.now(timezone.utc)
@@ -37,6 +40,7 @@ def land_raw(
 
     target.write_bytes(data)
     meta = {
+        **(extra_meta or {}),
         "source": source,
         "dataset": dataset,
         "filename": filename,
