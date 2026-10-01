@@ -128,4 +128,10 @@
 | **Throttle** | Deliberately limiting how much one run does (default one slice), to stay under rate limits and keep each run small |
 | **Tangential speed** | The real sideways speed of a star in km/s: 4.74047 x proper motion (mas/yr) / parallax (mas). The conversion constant is how many km/s one arcsecond per year is at one parsec |
 | **Relative to the Sun** | Speeds measured from where we are, so they include the Sun's own motion through the galaxy; fine for ranking, not the star's "true" speed |
+| **Flyby** | A star passing close to the Sun. A close one could tug on the comet cloud and send comets inward |
+| **Closest approach / miss distance** | The moment a star is nearest the Sun, and how near it gets. For straight-line motion the miss distance depends only on the sideways speed |
+| **Myr** | Million years |
+| **AU (astronomical unit)** | The Earth-Sun distance. One parsec is about 206,265 AU. The Sun's comet cloud is thought to reach out to roughly 50,000 to 100,000 AU |
+| **Oort cloud** | A huge, far-out shell of icy bodies around the Sun, where many comets come from |
+| **Straight-line approximation** | Pretending a star moves at constant speed in a straight line. Good for the next million years or so; the galaxy's gravity bends real paths over longer times |
 

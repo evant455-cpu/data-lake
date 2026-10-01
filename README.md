@@ -133,3 +133,11 @@ be made thinner. Running the same slice twice on one day is refused (raw is neve
 with the median speed for comparison. Formula: speed = 4.74047 x proper motion (mas/yr) / parallax (mas). It is the
 sideways (tangential) part only, relative to the Sun. Read-only; use `--top N` for a longer list.
 
+## Close flybys of the Sun
+
+`python -m datalake.flybys` finds which nearby stars will pass closest to the Sun, assuming each keeps moving in a
+straight line. The sideways speed sets the miss distance and the toward/away speed sets the time:
+time = -d x v_r / (v_r^2 + v_t^2), miss = d x v_t / sqrt(v_r^2 + v_t^2). Options: `--top N`, `--max-myr M`
+(default 5 million years), `--past` (stars that already passed). Only stars with a radial velocity can be placed.
+No uncertainties yet, so treat results as leads, not facts.
+
