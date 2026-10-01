@@ -106,4 +106,6 @@
 | **Read-only connection** | Opening the database so it can be read but never changed; even a buggy rule cannot damage the data |
 | **Tripwire (assumption) check** | A check that should never fire, like a star with a weak parallax after we asked only for strong ones; if it does, something we assumed has changed |
 | **Plausible but wrong** | A value inside every allowed range that is still false (Sirius showing a brightness of 8.5); simple rules miss these, comparing columns can catch them |
+| **Mean (average) vs median** | Mean = add everything up and divide; median = the middle value when sorted. A few huge values drag the mean up but barely move the median |
+| **Robust statistic** | A summary that stays honest when outliers are present; the median is robust, the mean is not |
 
