@@ -52,4 +52,10 @@ Each run is ADDED to `ocean.gap_events`: an event already in the table (same ves
 is replaced by the newer copy, anything else is added. The third output line shows how many were new,
 updated, and the table total. Each row's `_source_file` column says which fetch it came from.
 Re-running the same file is harmless (it reports 0 new, N updated).
-Data: Global Fishing Watch. Non-commercial use.
+Paging: GFW sends at most 100 events per request, so the fetch keeps asking for the next page until a
+page comes back short or empty (capped at 50 pages). If the fetch might be incomplete (page cap hit, or GFW
+seems to ignore the page offset) the output starts with a `WARNING: INCOMPLETE FETCH` line; what was fetched
+is still saved, and a later fetch of a narrower range fills the gap safely (upsert).
+Limits: GFW allows 50,000 requests a day and 1.5 million a month; going over is blocked (error 429) for 24 hours
+or 30 days.
+Data: Global Fishing Watch (CC BY-NC 4.0, credit required, non-commercial use).

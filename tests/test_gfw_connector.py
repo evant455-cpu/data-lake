@@ -18,17 +18,25 @@ class FakeResult:
 
 
 class FakeEvents:
-    def __init__(self, df):
-        self.df, self.calls = df, []
+    """Behaves like a paged API: each call returns one slice of the data.
+
+    ignore_offset=True imitates an API that silently ignores `offset` (always page 1).
+    """
+
+    def __init__(self, df, ignore_offset=False):
+        self.df, self.calls, self.ignore_offset = df, [], ignore_offset
 
     async def get_all_events(self, **kwargs):
         self.calls.append(kwargs)
-        return FakeResult(self.df)
+        offset = 0 if self.ignore_offset else kwargs.get("offset", 0)
+        limit = kwargs.get("limit")
+        end = None if limit is None else offset + limit
+        return FakeResult(self.df.iloc[offset:end])
 
 
 class FakeClient:
-    def __init__(self, df):
-        self.events = FakeEvents(df)
+    def __init__(self, df, ignore_offset=False):
+        self.events = FakeEvents(df, ignore_offset)
 
 
 GAPS = pd.DataFrame({
@@ -40,9 +48,9 @@ GAPS = pd.DataFrame({
 
 def _land(tmp_path, df=GAPS):
     client = FakeClient(df)
-    path = asyncio.run(land_gap_events(
+    fetch = asyncio.run(land_gap_events(
         client, start_date="2022-01-01", end_date="2022-05-01", region=REGION, lake_root=tmp_path))
-    return client, path
+    return client, fetch.path
 
 
 def test_lands_json_with_nested_fields_and_sidecar(tmp_path):
@@ -192,3 +200,63 @@ def test_two_overlapping_fetches_build_up_one_table(tmp_path):
     assert rows == [("A", 10.0), ("B", 25.0), ("C", 30.0)]  # B holds the newer value
     files = {r[0] for r in query("SELECT DISTINCT _source_file FROM ocean.gap_events", wh)}
     assert len(files) == 2  # rows remember which fetch they came from
+
+
+# ---- paging: never silently lose events beyond the first page ----
+
+def _many(n):
+    return _events(*[(f"V{i}", "2022-01-01", 1) for i in range(n)])
+
+
+def _fetch(tmp_path, df, *, limit=100, max_pages=50, ignore_offset=False):
+    client = FakeClient(df, ignore_offset)
+    fetch = asyncio.run(land_gap_events(
+        client, start_date="2022-01-01", end_date="2022-05-01", region=REGION,
+        limit=limit, max_pages=max_pages, lake_root=tmp_path))
+    return client, fetch
+
+
+def test_pages_through_all_events(tmp_path):
+    client, fetch = _fetch(tmp_path, _many(250))
+    assert [c["offset"] for c in client.events.calls] == [0, 100, 200]
+    assert len(json.loads(fetch.path.read_text())) == 250
+    assert (fetch.rows, fetch.pages, fetch.complete, fetch.warning) == (250, 3, True, None)
+
+
+def test_exactly_one_full_page_is_confirmed_complete_by_an_empty_next_page(tmp_path):
+    client, fetch = _fetch(tmp_path, _many(100))
+    assert [c["offset"] for c in client.events.calls] == [0, 100]
+    assert (fetch.rows, fetch.complete, fetch.warning) == (100, True, None)
+
+
+def test_page_cap_lands_what_it_has_and_warns(tmp_path):
+    _, fetch = _fetch(tmp_path, _many(250), max_pages=2)
+    assert len(json.loads(fetch.path.read_text())) == 200
+    assert fetch.complete is False and "200" in fetch.warning and "narrower" in fetch.warning
+
+
+def test_api_that_ignores_offset_is_caught_not_duplicated(tmp_path):
+    _, fetch = _fetch(tmp_path, _many(250), ignore_offset=True)
+    assert len(json.loads(fetch.path.read_text())) == 100  # page 1 only, no repeated copies
+    assert fetch.complete is False and "offset" in fetch.warning
+
+
+def test_empty_result_is_complete_with_one_page(tmp_path):
+    _, fetch = _fetch(tmp_path, pd.DataFrame())
+    assert (fetch.rows, fetch.pages, fetch.complete) == (0, 1, True)
+
+
+def test_pipeline_summary_carries_the_completeness_signal(tmp_path):
+    from datalake.connectors.gfw import run_gap_pipeline, summary_lines
+
+    kw = dict(start_date="2022-01-01", end_date="2022-05-01", region=REGION,
+              lake_root=tmp_path, warehouse_path=tmp_path / "wh.duckdb")
+    ok = asyncio.run(run_gap_pipeline(FakeClient(_many(5)), **kw))
+    assert ok.complete and ok.pages == 1 and ok.rows_fetched == 5
+    assert not any("WARNING" in line for line in summary_lines(ok))
+
+    capped = asyncio.run(run_gap_pipeline(FakeClient(_many(250)), limit=100, max_pages=1,
+                                          **{**kw, "end_date": "2022-06-01"}))
+    assert not capped.complete
+    assert any(line.startswith("WARNING") for line in summary_lines(capped))
+    assert capped.rows_loaded > 0  # incomplete data is still kept: upsert makes a later re-fetch safe

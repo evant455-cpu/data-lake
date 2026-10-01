@@ -53,6 +53,17 @@ def get_token(env_file: Path = Path(".env")) -> str:
     raise RuntimeError(f"No GFW token found. Set {TOKEN_ENV} or add it to a .env file.")
 
 
+@dataclass
+class FetchResult:
+    """What a fetch brought back, including whether we know it is everything."""
+
+    path: Path  # the raw JSON file
+    rows: int  # events in that file
+    pages: int  # requests made to GFW
+    complete: bool  # False = there may be more events GFW did not give us
+    warning: str | None = None  # plain-words explanation when complete is False
+
+
 async def land_gap_events(
     client,
     *,
@@ -60,34 +71,73 @@ async def land_gap_events(
     end_date: str,
     region: dict,
     limit: int = 100,
+    max_pages: int = 50,
     lake_root: Path = Path("lake"),
-) -> Path:
+) -> FetchResult:
     """Fetch AIS-gap events ("went dark") and land them untouched in the raw layer.
+
+    GFW answers in pages of at most `limit` events, so we keep asking for the next page
+    (`offset` = how many events to skip) until a page comes back short or empty.
+    Two safety nets stop an endless or silently-cut fetch:
+      - `max_pages` caps the number of requests (also protects the daily rate limit);
+      - if a page is identical to the one before, the API is ignoring `offset`, so we stop.
+    In both cases the events fetched so far are still landed, and the result says
+    `complete=False` with a warning, so a cut-off fetch is never mistaken for a full one.
 
     `client` is passed in (not created here) so tests can give a fake one.
     `region` looks like {"dataset": "public-eez-areas", "id": "5690"}.
-    Returns the path of the raw JSON file.
     """
     # Imported here so the module loads even where the lake code is used without GFW tools.
+    import pandas as pd
+
     from datalake.landing import land_raw
 
-    result = await client.events.get_all_events(
-        datasets=[GAPS_DATASET],
-        start_date=start_date,
-        end_date=end_date,
-        region=region,
-        limit=limit,
-    )
-    df = result.df()
-    # JSON keeps nested fields (vessel, gap, position) intact; CSV would flatten them to text.
-    payload = "[]" if df is None or len(df) == 0 else df.to_json(orient="records", date_format="iso")
+    pages: list = []
+    complete, warning, requests = False, None, 0
+    for page in range(max_pages):
+        result = await client.events.get_all_events(
+            datasets=[GAPS_DATASET],
+            start_date=start_date,
+            end_date=end_date,
+            region=region,
+            limit=limit,
+            offset=page * limit,
+        )
+        requests += 1
+        df = result.df()
+        if df is None or len(df) == 0:
+            complete = True  # nothing more to give
+            break
+        if pages and df.equals(pages[-1]):
+            warning = (
+                "GFW sent the same page twice, so it seems to ignore `offset`. "
+                f"Kept the first {sum(len(x) for x in pages)} events; there may be more."
+            )
+            break
+        pages.append(df)
+        if len(df) < limit:
+            complete = True  # a short page is the last page
+            break
+    else:
+        got = sum(len(x) for x in pages)
+        warning = (
+            f"Stopped after {max_pages} pages ({got} events) and GFW still had more. "
+            "Fetch a narrower date range (or a higher max_pages) to get the rest."
+        )
 
-    return land_raw(
+    combined = pd.concat(pages, ignore_index=True) if pages else None
+    # JSON keeps nested fields (vessel, gap, position) intact; CSV would flatten them to text.
+    payload = "[]" if combined is None else combined.to_json(orient="records", date_format="iso")
+    raw = land_raw(
         payload.encode("utf-8"),
         source="gfw",
         dataset="gap-events",
         filename=f"{start_date}_{end_date}_{region['dataset']}-{region['id']}.json",
         lake_root=lake_root,
+    )
+    return FetchResult(
+        path=raw, rows=0 if combined is None else len(combined), pages=requests,
+        complete=complete, warning=warning,
     )
 
 
@@ -105,6 +155,10 @@ class PipelineSummary:
     skipped_no_key: int = 0  # events missing vessel id or start time (cannot be matched)
     duplicates_in_file: int = 0
     table_total: int = 0  # rows in the table afterwards
+    rows_fetched: int = 0  # events GFW gave us in this fetch (0 for --raw)
+    pages: int = 0  # requests made to GFW (0 for --raw)
+    complete: bool = True  # False = the fetch may be missing events
+    warning: str | None = None
 
 
 def process_raw(
@@ -151,6 +205,7 @@ async def run_gap_pipeline(
     end_date: str,
     region: dict,
     limit: int = 100,
+    max_pages: int = 50,
     lake_root: Path = Path("lake"),
     warehouse_path: Path | None = None,
     schema: str = "ocean",
@@ -160,10 +215,38 @@ async def run_gap_pipeline(
 
     Each run is added to the warehouse table; events seen before are replaced by the newer copy.
     """
-    raw = await land_gap_events(
-        client, start_date=start_date, end_date=end_date, region=region, limit=limit, lake_root=lake_root
+    fetch = await land_gap_events(
+        client, start_date=start_date, end_date=end_date, region=region,
+        limit=limit, max_pages=max_pages, lake_root=lake_root,
     )
-    return process_raw(raw, lake_root=lake_root, warehouse_path=warehouse_path, schema=schema, table=table)
+    summary = process_raw(fetch.path, lake_root=lake_root, warehouse_path=warehouse_path, schema=schema, table=table)
+    summary.rows_fetched, summary.pages = fetch.rows, fetch.pages
+    summary.complete, summary.warning = fetch.complete, fetch.warning
+    return summary
+
+
+def summary_lines(r: PipelineSummary) -> list[str]:
+    """The text the command line prints after a run (kept separate so it can be tested)."""
+    lines = []
+    if not r.complete:
+        lines += [f"WARNING: INCOMPLETE FETCH. {r.warning}", ""]
+    lines += [
+        f"1. Raw:       {r.raw_path}",
+        f"2. Clean:     {r.clean_path}",
+        f"3. Warehouse: {r.table}: {r.new} new, {r.updated} updated, {r.table_total} total",
+    ]
+    if r.pages:
+        lines.append(f"   Fetched {r.rows_fetched} events in {r.pages} request{'s' if r.pages != 1 else ''}.")
+    if r.skipped_no_key or r.duplicates_in_file:
+        lines.append(f"   Not loaded: {r.skipped_no_key} missing vessel id or start time, "
+                     f"{r.duplicates_in_file} repeated inside the file")
+    bad = {k: v for k, v in r.bad_values.items() if v}
+    lines.append(f"Values that did not fit their type: {bad or 'none'}")
+    if r.rows_loaded == 0:
+        lines.append("No events in the file. Check the dates, region id and token.")
+    lines.append("Try: python -m datalake.warehousing \"SELECT count(*) FROM ocean.gap_events\"")
+    lines.append("Data: Global Fishing Watch (CC BY-NC 4.0, non-commercial use)")
+    return lines
 
 
 def main() -> None:
@@ -201,18 +284,7 @@ def main() -> None:
                 "  python -m datalake.connectors.gfw --raw <that path>"
             )
 
-    bad = {k: v for k, v in r.bad_values.items() if v}
-    print(f"1. Raw:       {r.raw_path}")
-    print(f"2. Clean:     {r.clean_path}")
-    print(f"3. Warehouse: {r.table}: {r.new} new, {r.updated} updated, {r.table_total} total")
-    if r.skipped_no_key or r.duplicates_in_file:
-        print(f"   Not loaded: {r.skipped_no_key} missing vessel id or start time, "
-              f"{r.duplicates_in_file} repeated inside the file")
-    print(f"Values that did not fit their type: {bad or 'none'}")
-    if r.rows_loaded == 0:
-        print("No events in the file. Check the dates, region id and token.")
-    print("Try: python -c \"from datalake.warehousing import query; print(query('SELECT count(*) FROM ocean.gap_events'))\"")
-    print("Data: Global Fishing Watch")
+    print("\n".join(summary_lines(r)))
 
 
 if __name__ == "__main__":

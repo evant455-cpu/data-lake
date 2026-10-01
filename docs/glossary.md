@@ -82,3 +82,9 @@
 | **True duplicate** | Two records identical in every field; safe to collapse into one |
 | **Overlap (date window)** | An event counts as inside a date range if any part of it overlaps the range, so an event can start before and end after the window |
 | **Outlier** | A value far outside the normal range (a 3.7-year gap among gaps measured in hours or days); it can distort averages and models |
+| **Pagination (paging)** | An API sending a long list in pages (here 100 events each); you ask for page after page until it runs out |
+| **Offset** | "Skip this many results first"; page 3 of 100 means offset 200 |
+| **Truncation** | Getting only part of the data without being told; a result of exactly the page limit is the warning sign |
+| **Rate limit** | How many requests a source lets you make per day or month; GFW allows 50,000 a day |
+| **HTTP 429** | The "too many requests" reply; GFW blocks you for a day or a month after it |
+| **Complete vs incomplete fetch** | Whether we know we got everything; an incomplete fetch is flagged loudly, never passed off as full |
