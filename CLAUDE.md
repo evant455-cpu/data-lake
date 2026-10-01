@@ -33,6 +33,14 @@ New source = small connector + raw folder + cleaning step. Existing code should 
   name matching, labelling), not millions of rows.
 - New behaviour gets a test using fake data. Run `python -m pytest -q` before committing.
 
+## HANDOFF (read first; written 2026-10-01 for a new Claude Code session)
+- Repo state: HEAD at the commit that added this section on origin/main; 219 tests pass (`python -m pytest -q`).
+- How the owner works now: Claude Code Remote Control from his phone (`claude remote-control` run in `C:\data-lake`, same claude.ai account, PC must stay on). His machine is Windows + PowerShell, repo at `C:\data-lake`, files have CRLF endings, so use `git -c core.autocrlf=true status/pull` there. He runs fetches himself; Gaia, GFW and Exoplanet archives are blocked from cloud sandboxes but reachable from his PC. scikit-learn is installed on his PC. Never read or print his `.env`.
+- Verified live by him: GFW (paging, incremental), Gaia (shells, RV errors), exoplanets (+ host positions), quality checks, rebuild, flybys. Only tested with fakes / on a COPY of his warehouse, NOT yet run by him: `datalake.misfits`, `datalake.motion`, `datalake.planet_gaps` (first ML model; on the copy: AUC 0.85, avg precision 0.19 vs 0.03 random; top candidates are mostly binaries, because no feature knows about close companions).
+- Three-part system (agreed): deterministic scripts -> ML model (learns patterns in numbers; ONE MODEL PER QUESTION, not per source; sources are inputs) -> Claude/LLM (explains a short list). Keep this framing when teaching.
+- Weak spot: the GJ 411 / Lalande 21185 position match is 8.8 arcsec, near the 10 arcsec radius; fast stars are where the radius is weakest.
+- NEXT (owner's order; do ONE at a time, then stop): (a) he runs `git pull` then `python -m datalake.planet_gaps`; (b) optional: add a 'has close companion' feature from our own table and see if binaries drop; (c) merge the near-copied Gaia/GFW/exoplanet fetch+summary classes (rule of three) and write a short 'new source checklist / connector contract' doc (fetch reports complete/cut-off, schema, key, quality checks, register in `rebuild._handlers`, `quality.all_checks`, `backfill._plans`); (d) optimise the GFW path the same way (history windows as queue slices = 4b, completeness checks, inspect the 'repeated inside the file' rows, try GFW `id` as key); (e) then scheduling via GitHub Actions + PRIVATE data repo (not yet created or confirmed by owner), RV detector (|RV| > ~300 km/s), ML version of misfits (isolation forest), Telegram alerts, AI explain layer, optional publishing back. Unbuilt ideas: flyby error propagation (Monte Carlo), mass estimates (mass_est + mass_method), implausible-RV quality rule.
+
 ## Lesson plan (status)
 - [x] Lesson 1: layout and `landing.land_raw` (raw data + provenance sidecar + no-overwrite rule)
 - [x] Lesson 2: raw -> clean (`datalake.cleaning.clean_csv`: parse, types, nulls, Parquet; uses pyarrow)

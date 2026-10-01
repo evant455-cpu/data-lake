@@ -10,3 +10,5 @@ warehouse/*
 __pycache__/
 .pytest_cache/
 *.egg-info/
+lake/state/*
+!lake/state/.gitkeep
