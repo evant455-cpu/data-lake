@@ -4,7 +4,8 @@ The model is a CLASSIFIER: it learns, from stars that do and do not have known p
 planet host looks like in our data, then gives every star a probability (a score from 0 to 1).
 
   Features (what it looks at): distance (as log10 parsecs), brightness (G), colour (bp_rp),
-    true brightness (absolute G), whether colour is missing, whether Gaia has a radial velocity.
+    true brightness (absolute G), whether colour is missing, whether Gaia has a radial velocity,
+    whether the star has a close companion (another of OUR stars at the same distance within COMPANION_AU).
   Labels (what it learns to predict): does the star host a known planet? Taken from
     datalake.planet_hosts, so hosts found by sky position count too.
   Model: logistic regression (a weighted sum of the features, squeezed into a probability). Simple and
@@ -30,9 +31,12 @@ from pathlib import Path
 from datalake.planet_hosts import find_host_matches
 from datalake.warehousing import DEFAULT_WAREHOUSE, query
 
-FEATURES = ("log10_distance_pc", "g_mag", "bp_rp", "abs_g", "no_colour", "has_rv")
+FEATURES = ("log10_distance_pc", "g_mag", "bp_rp", "abs_g", "no_colour", "has_rv", "has_companion")
 FOLDS = 5
 SEED = 0  # fixed, so the same data always gives the same scores
+# A companion = another star in our table, closer on the sky than this many AU (projected), at the same distance.
+# On the real table (2026-10-01): 16% of stars have one, and they host known planets less often (2.3% vs 3.5%).
+COMPANION_AU = 1000.0
 
 
 @dataclass
@@ -44,6 +48,7 @@ class Candidate:
     abs_g: float
     has_rv: bool
     score: float  # out-of-fold probability of being a known host
+    companion_au: float = float("inf")  # projected distance to the nearest same-distance star (inf = none)
 
 
 @dataclass
@@ -59,25 +64,63 @@ class ModelResult:
     candidates: list[Candidate] = field(default_factory=list)  # stars WITHOUT a known planet, highest score first
 
 
+def nearest_companion_au(stars) -> list[float]:
+    """For each star (ra_deg, dec_deg, parallax_mas, parallax_error_mas): the projected separation in AU to the nearest
+    OTHER star at the same distance, or inf if there is none.
+
+    Projected separation = angle on the sky (arcsec) x distance (pc) gives AU. "Same distance" = the parallaxes agree
+    within 3 combined error bars plus 2% (binary stars wobble, which disturbs Gaia's parallax a little). Without this
+    test, an unrelated star far behind would count as a companion just because it looks close on the sky.
+    """
+    import numpy as np
+
+    if not stars:
+        return []
+    ra = np.radians([s[0] for s in stars])
+    dec = np.radians([s[1] for s in stars])
+    plx = np.array([s[2] for s in stars], dtype=float)
+    err = np.array([s[3] or 0.0 for s in stars], dtype=float)
+    unit = np.stack([np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)], axis=1)
+    out = np.full(len(stars), np.inf)
+    step = 1000  # compare 1000 stars against all at a time, to keep memory small
+    for a in range(0, len(stars), step):
+        b = min(a + step, len(stars))
+        arcsec = np.degrees(np.arccos(np.clip(unit[a:b] @ unit.T, -1.0, 1.0))) * 3600
+        same = np.abs(plx[a:b, None] - plx[None, :]) <= (3 * np.hypot(err[a:b, None], err[None, :])
+                                                         + 0.02 * np.maximum(plx[a:b, None], plx[None, :]))
+        au = np.where(same, arcsec * (1000.0 / plx[a:b, None]), np.inf)
+        au[np.arange(b - a), np.arange(a, b)] = np.inf  # a star is not its own companion
+        out[a:b] = au.min(axis=1)
+    return out.tolist()
+
+
 def _load(warehouse_path: Path):
     rows = query(
         """SELECT source_id, 1000.0 / parallax AS pc, phot_g_mean_mag, bp_rp,
-                  phot_g_mean_mag + 5 * log10(parallax) - 10 AS abs_g, radial_velocity IS NOT NULL AS has_rv
+                  phot_g_mean_mag + 5 * log10(parallax) - 10 AS abs_g, radial_velocity IS NOT NULL AS has_rv,
+                  ra, dec, parallax, parallax_error
            FROM astro.nearby_stars ORDER BY source_id""",
         warehouse_path,
     )
-    usable = [r for r in rows if r[2] is not None and r[1] is not None and r[1] > 0]
+    placeable = [r for r in rows if r[8] is not None and r[8] > 0 and r[6] is not None and r[7] is not None]
+    # Companions are searched among ALL placeable stars, also those the model leaves out (a faint partner counts).
+    sep = dict(zip((r[0] for r in placeable), nearest_companion_au([(r[6], r[7], r[8], r[9]) for r in placeable])))
+    usable = [r[:6] + (sep.get(r[0], float("inf")),)
+              for r in rows if r[2] is not None and r[1] is not None and r[1] > 0]
     return usable, len(rows) - len(usable)
 
 
 def features(rows) -> "np.ndarray":
-    """One row of numbers per star, in the order of FEATURES. Missing colour -> the typical colour, plus a flag."""
+    """One row of numbers per star, in the order of FEATURES. Missing colour -> the typical colour, plus a flag.
+
+    rows: (source_id, pc, g_mag, bp_rp, abs_g, has_rv, companion_au).
+    """
     import numpy as np
 
     colours = [r[3] for r in rows if r[3] is not None]
     fill = float(np.median(colours)) if colours else 0.0
     return np.array([[np.log10(r[1]), r[2], r[3] if r[3] is not None else fill, r[4],
-                      float(r[3] is None), float(r[5])] for r in rows])
+                      float(r[3] is None), float(r[5]), float(r[6] < COMPANION_AU)] for r in rows])
 
 
 def run_model(warehouse_path: Path = DEFAULT_WAREHOUSE) -> ModelResult:
@@ -108,7 +151,7 @@ def run_model(warehouse_path: Path = DEFAULT_WAREHOUSE) -> ModelResult:
     weights = dict(zip(FEATURES, (float(w) for w in full[-1].coef_[0])))
 
     candidates = [
-        Candidate(r[0], r[1], r[2], r[3], r[4], bool(r[5]), float(s))
+        Candidate(r[0], r[1], r[2], r[3], r[4], bool(r[5]), float(s), r[6])
         for r, s, label in zip(rows, scores, y) if not label
     ]
     candidates.sort(key=lambda c: (-c.score, c.source_id))
@@ -134,12 +177,15 @@ def report(r: ModelResult, top: int = 15) -> str:
         lines.append(f"  {name:18s} {w:+.2f}")
     shown = r.candidates[:top]
     lines += ["", f"Stars with no known planet that look most like the hosts (top {len(shown)}):",
-              f"  {'source_id':>20s}  {'pc':>5s}  {'G':>5s}  {'bp_rp':>5s}  {'abs_G':>5s}  {'RV':>3s}  score"]
+              f"  {'source_id':>20s}  {'pc':>5s}  {'G':>5s}  {'bp_rp':>5s}  {'abs_G':>5s}  {'RV':>3s}  "
+              f"{'comp_AU':>7s}  score"]
     for c in shown:
         colour = f"{c.bp_rp:5.2f}" if c.bp_rp is not None else "    -"
+        comp = f"{c.companion_au:7.0f}" if c.companion_au < COMPANION_AU else "      -"
         lines.append(f"  {c.source_id:>20d}  {c.pc:5.1f}  {c.g_mag:5.1f}  {colour}  {c.abs_g:5.1f}  "
-                     f"{'yes' if c.has_rv else 'no':>3s}  {c.score:.2f}")
-    lines += [f"({len(shown)} rows)", "",
+                     f"{'yes' if c.has_rv else 'no':>3s}  {comp}  {c.score:.2f}")
+    lines += [f"({len(shown)} rows; comp_AU = projected distance to a companion closer than {COMPANION_AU:.0f} AU, "
+              "- = none)", "",
               "These are leads, not discoveries: the stars look like where planets have been found so far. Check a "
               "name in SIMBAD before reading more into it (a planet may be listed on a companion star)."]
     return "\n".join(lines)

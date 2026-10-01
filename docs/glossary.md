@@ -166,4 +166,7 @@
 | **Weight (coefficient)** | How strongly logistic regression leans on a feature. Features are first put on a common scale (standardised), so weights can be compared: + pushes towards "host", - away |
 | **Standardise** | Rescale a feature to average 0 and spread 1, so distance in parsecs and brightness in magnitudes can be compared fairly |
 | **Average precision** | A score for how well the true hosts are packed at the top of the ranking. Random guessing scores the share of hosts (here about 0.03) |
+| **Companion (star)** | Another star bound to ours, as in a binary (two stars) or triple. We count one when another star in our table sits at the same distance and closer than 1000 AU on the sky |
+| **Projected separation** | How far apart two stars look, turned into AU: angle on the sky (arcsec) x distance (pc). It is a minimum, because one star may also sit in front of the other |
+| **Mutation check** | Breaking the code on purpose (one small change) and checking that a test fails. If no test fails, the tests were not really guarding that line |
 | **Spy (in a test)** | A wrapper around a real function that records how it was called. We use one to prove the scores really come from cross-validation |

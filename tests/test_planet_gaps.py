@@ -1,3 +1,4 @@
+import math
 import random
 
 import pytest
@@ -25,10 +26,14 @@ def _sky(n, seed=1):
     return stars
 
 
-def _build(tmp_path, stars, host_ids, position_hosts=()):
-    """Load stars, planets around host_ids (by Gaia number) and around position_hosts (no Gaia number, by position)."""
+def _build(tmp_path, stars, host_ids, position_hosts=(), partners=()):
+    """Load stars, planets around host_ids (by Gaia number) and around position_hosts (no Gaia number, by position).
+    Each star in partners gets a faint companion 5 arcsec away at the same distance (source_id + 100000)."""
     wh = tmp_path / "w.duckdb"
     lines = [STAR_HEADER] + [f"{s},{(s % 300) + 0.5},10.0,{p},0.1,0.0,0.0,{g},{c},{rv}" for s, p, g, c, rv in stars]
+    by_id = {s[0]: s for s in stars}
+    lines += [f"{s + 100000},{(s % 300) + 0.5 + 5 / 3600 / math.cos(math.radians(10))},10.0,{by_id[s][1]},0.1,0.0,0.0,"
+              f"{by_id[s][2] + 4},2.5," for s in partners]
     gaia.process_raw(land_raw(("\n".join(lines) + "\n").encode(), source="gaia", dataset="nearby-stars", filename="s.csv",
                               lake_root=tmp_path), lake_root=tmp_path, warehouse_path=wh)
     planets = [f"P{s} b,H{s},Gaia DR3 {s},5,200,9,1,2019,Radial Velocity,10,3," for s in host_ids]
@@ -138,8 +143,45 @@ def test_every_star_is_scored_by_a_model_that_never_saw_it(tmp_path, monkeypatch
 
 
 def test_features_use_log_distance_and_flag_missing_colour():
-    rows = [(1, 100.0, 9.0, 1.2, 4.0, True), (2, 10.0, 5.0, None, 5.0, False), (3, 1.0, 1.0, 2.0, 6.0, True)]
+    inf = float("inf")
+    rows = [(1, 100.0, 9.0, 1.2, 4.0, True, inf), (2, 10.0, 5.0, None, 5.0, False, 999.0),
+            (3, 1.0, 1.0, 2.0, 6.0, True, 1000.0)]
     X = planet_gaps.features(rows)
     assert X[:, 0].tolist() == [2.0, 1.0, 0.0]  # log10 of 100, 10 and 1 parsecs
     assert X[1, 2] == 1.6 and X[1, 4] == 1.0 and X[0, 4] == 0.0  # median colour filled in, and flagged
     assert X[:, 5].tolist() == [1.0, 0.0, 1.0]
+    assert X[:, 6].tolist() == [0.0, 1.0, 0.0]  # companion only if closer than COMPANION_AU (1000 AU)
+
+
+def test_companion_is_measured_in_au_and_must_be_at_the_same_distance():
+    ten_arcsec = 10 / 3600
+    stars = [
+        (10.0, 0.0, 100.0, 0.1),               # A: 10 pc
+        (10.0 + ten_arcsec, 0.0, 100.0, 0.1),  # B: 10 arcsec from A, same distance -> 10 x 10 = 100 AU
+        (10.0, ten_arcsec / 2, 10.0, 0.1),     # C: right next to A on the sky, but 100 pc away: NOT a companion
+        (200.0, -40.0, 100.0, 0.1),            # D: same distance, far across the sky (millions of AU)
+    ]
+    a, b, c, d = planet_gaps.nearest_companion_au(stars)
+    assert a == pytest.approx(100, rel=1e-3) and b == pytest.approx(100, rel=1e-3)
+    assert c == float("inf") and d > 1e6
+    assert planet_gaps.nearest_companion_au([]) == []
+
+
+def test_parallax_error_bars_decide_same_distance():
+    stars = [(10.0, 0.0, 100.0, 1.0), (10.0, 1 / 3600, 104.0, 1.0)]  # 4 mas apart; allowed 3 x 1.41 + 2.08 = 6.3
+    assert planet_gaps.nearest_companion_au(stars)[0] < 1000
+    stars = [(10.0, 0.0, 100.0, 0.1), (10.0, 1 / 3600, 104.0, 0.1)]  # same gap, small errors: allowed 0.42 + 2.08
+    assert planet_gaps.nearest_companion_au(stars)[0] == float("inf")
+
+
+def test_the_model_learns_that_stars_with_companions_lack_known_planets(tmp_path):
+    stars = _sky(200)
+    near = _nearest(stars, 50)
+    hosts, paired = near[::2], near[1::2]  # equally near, but planets only around the single stars
+    r = planet_gaps.run_model(_build(tmp_path, stars, hosts, partners=paired))
+    assert r.n_stars == 225 and r.n_hosts == 25  # 25 faint partner stars were added
+    assert r.weights["has_companion"] < 0
+    one = next(c for c in r.candidates if c.source_id == paired[0])
+    assert one.companion_au == pytest.approx(5 * one.pc, rel=1e-2)  # 5 arcsec x distance in pc = AU
+    text = planet_gaps.report(r, top=3)
+    assert "comp_AU" in text
