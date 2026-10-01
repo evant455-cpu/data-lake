@@ -86,6 +86,20 @@ which proves it is complete.
 Same rules as GFW: raw is never overwritten; `--raw PATH` re-cleans a file without the network.
 Data: ESA Gaia DR3 (ESA/Gaia/DPAC).
 
+## Live run: NASA Exoplanet Archive (confirmed planets)
+
+`python -m datalake.connectors.exoplanets` fetches every confirmed planet (one snapshot, a few thousand rows) and
+lands it raw -> clean -> `astro.exoplanets` (key: planet name; a newer snapshot replaces revised planets). No token.
+Completeness: it also asks the archive how many planets it has and compares; fewer received = `WARNING: INCOMPLETE
+FETCH` and exit code 2. Re-clean an existing raw file with no network: `--raw PATH`. Not yet run live.
+
+Link to the stars: the planet table holds the host star's Gaia number as text (`gaia_dr3_id`, kept exactly as sent).
+`exoplanets.GAIA_SOURCE_ID_SQL` turns it into a number inside a question, so planets join to our stars:
+`SELECT ... FROM astro.exoplanets p JOIN astro.nearby_stars s ON s.source_id = <GAIA_SOURCE_ID_SQL>`.
+Most known planets orbit stars farther than our 30 pc sample, so only a short list will match. Mass caution: for
+Radial Velocity planets `pl_bmasse` is a minimum mass.
+Data: NASA Exoplanet Archive, operated by Caltech/IPAC under contract with NASA. Please credit it.
+
 ## Data-quality checks
 
 ```

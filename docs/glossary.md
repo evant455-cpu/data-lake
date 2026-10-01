@@ -145,3 +145,9 @@
 | **White dwarf** | The leftover core of a dead Sun-like star: hot and bluish-white but tiny, so very faint. On the colour-magnitude diagram it sits well below the main sequence |
 | **Detector** | A rule or model that flags rows that stand out. Ours only flags: it never changes or deletes data. A flag is a lead to check, not a verdict |
 | **Neighbour count (density)** | How many other stars sit in a small box around one star on the colour-magnitude diagram. Few neighbours means the star is in a lonely spot. Used by `datalake.misfits` |
+| **Exoplanet** | A planet orbiting a star other than our Sun. The NASA Exoplanet Archive lists the confirmed ones |
+| **Host star** | The star a planet orbits. Our link between planets and Gaia is the host star's Gaia number |
+| **Snapshot (of a table)** | A full copy of a whole table at one moment. Good for small tables that get revised, like the planet list: fetch it all, and let the upsert replace what changed |
+| **Count check (completeness)** | Asking the archive "how many rows do you have?" and comparing with what we received. Better than guessing a row limit, because it works whatever the limit is |
+| **pscomppars** | The archive's "Planetary Systems Composite Parameters" table: one row per known planet, with the best-known values combined from many papers |
+| **Minimum mass (m sin i)** | The planet mass from the radial-velocity method is only a lower limit, because we do not know how tilted the orbit is. Most `pl_bmasse` values for Radial Velocity planets are this |

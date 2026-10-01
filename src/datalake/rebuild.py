@@ -29,12 +29,13 @@ def _handlers() -> dict:
 
     Imported here (not at the top) so a new connector only needs one more line in this table.
     """
-    from datalake.connectors import gaia, gfw
+    from datalake.connectors import exoplanets, gaia, gfw
 
     return {
         ("gfw", "gap-events"): gfw.process_raw,
         ("gaia", "nearby-stars"): gaia.process_raw,
         ("gaia", "star-errors"): gaia.process_star_errors_raw,
+        ("exoplanets", "planets"): exoplanets.process_raw,
     }
 
 
