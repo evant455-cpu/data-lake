@@ -141,6 +141,16 @@ time = -d x v_r / (v_r^2 + v_t^2), miss = d x v_t / sqrt(v_r^2 + v_t^2). Options
 (default 5 million years), `--past` (stars that already passed). Only stars with a radial velocity can be placed.
 No uncertainties yet, so treat results as leads, not facts.
 
+## Stars that do not belong (colour vs brightness)
+
+`python -m datalake.misfits` plots every star by colour (`bp_rp`) against true brightness (absolute magnitude) and
+flags the ones with fewer than 5 other stars nearby (colour within 0.15, absolute magnitude within 1.0). Real stars
+gather in a few groups (main sequence, white dwarfs), so a lonely star is either a rare kind of star or has a
+wrong number. It counts neighbours instead of comparing with a "typical" brightness because the blue half of the
+diagram holds two groups at once. Limits: a wrong value that lands inside a crowd looks normal (Sirius's G of 8.5
+puts it among the white dwarfs); stars with no colour or brightness are reported but not judged; above G 19 the
+colour itself is unreliable. Read-only; `--top N` for a longer list. Flags are leads, not conclusions.
+
 ## Error bars for the stars (a second Gaia table)
 
 `astro.star_errors` holds Gaia's margins of error for the same stars as `astro.nearby_stars`: `radial_velocity_error`

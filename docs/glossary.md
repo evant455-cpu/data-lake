@@ -139,3 +139,9 @@
 | **Dataset (here)** | One kind of table we pull from a source, with its own raw folder, columns and warehouse table. A new dataset leaves the old ones untouched |
 | **Join** | Matching rows of two tables by a shared key (here `source_id`) so each star's measurements and its error bars sit side by side |
 
+| **Absolute magnitude** | How bright a star would look from a standard 10 parsecs away, so it shows true brightness. Formula: G + 5 x log10(parallax in mas) - 10. Smaller numbers are brighter |
+| **Colour-magnitude diagram** | A plot of colour (bp_rp) against absolute magnitude. Stars are not scattered evenly: they gather in a few groups, so a star far from every group stands out |
+| **Main sequence** | The big band of ordinary stars that fuse hydrogen in their cores, including the Sun. Redder ones are fainter and smaller |
+| **White dwarf** | The leftover core of a dead Sun-like star: hot and bluish-white but tiny, so very faint. On the colour-magnitude diagram it sits well below the main sequence |
+| **Detector** | A rule or model that flags rows that stand out. Ours only flags: it never changes or deletes data. A flag is a lead to check, not a verdict |
+| **Neighbour count (density)** | How many other stars sit in a small box around one star on the colour-magnitude diagram. Few neighbours means the star is in a lonely spot. Used by `datalake.misfits` |
