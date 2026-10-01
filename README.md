@@ -76,3 +76,16 @@ are reported to cut off silently at 2000 rows, so the limit cannot go above that
 Same rules as GFW: raw is never overwritten; `--raw PATH` re-cleans a file without the network.
 Data: ESA Gaia DR3 (ESA/Gaia/DPAC).
 
+## Data-quality checks
+
+```
+python -m datalake.quality
+```
+
+Runs a set of rules over every loaded table and prints one line per rule: `[ok]`, `[WARN]` (suspicious, such as a
+gap longer than a year) or `[ERROR]` (impossible, such as a gap that ends before it starts), with a few example
+rows under anything flagged. It only flags: nothing is changed or deleted, and it opens the warehouse read-only.
+Exit code is 1 if any `[ERROR]` rule flags rows (warnings do not fail the run), so a scheduled job can stop on it.
+Rules sit next to each source's schema: `GAP_EVENT_CHECKS` in `connectors/gfw.py`,
+`NEARBY_STARS_CHECKS` in `connectors/gaia.py`. A new source adds its own list and registers it in `quality.all_checks`.
+

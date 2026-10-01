@@ -22,6 +22,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from datalake.quality import Check
+
 GAIA_SYNC_URL = "https://gea.esac.esa.int/tap-server/tap/sync"
 
 # Anonymous synchronous queries are reported to stop silently at 2000 rows (several projects hit this),
@@ -42,6 +44,22 @@ NEARBY_STARS_SCHEMA = {
     "radial_velocity": "float",  # km/s toward/away from us; many stars have none (null)
 }
 NEARBY_STARS_KEY = ("source_id",)
+
+
+# Data-quality rules (Lesson 6). A row matching the condition is flagged, never removed.
+# NOTE: simple rules like these cannot catch a value that is merely WRONG but plausible, e.g. Sirius
+# showing a brightness of 8.5. That needs a rule that compares columns (colour vs brightness vs distance),
+# which is where the machine-learning anomaly detector comes in later.
+NEARBY_STARS_CHECKS = [
+    Check("impossible_position", "astro.nearby_stars", "ra < 0 OR ra >= 360 OR dec < -90 OR dec > 90", "error",
+          "Right ascension must be 0-360 degrees and declination -90 to 90."),
+    Check("no_valid_parallax", "astro.nearby_stars", "parallax IS NULL OR parallax <= 0", "error",
+          "Without a positive parallax there is no distance."),
+    Check("weak_parallax", "astro.nearby_stars", "parallax > 0 AND parallax_error > 0 AND parallax / parallax_error < 10", "warning",
+          "Our question asked only for stars measured to better than 10%, so this means the fetch or the data changed."),
+    Check("no_colour", "astro.nearby_stars", "bp_rp IS NULL", "warning",
+          "No colour measured; colour-based analysis will skip this star."),
+]
 
 
 def nearby_stars_query(limit: int = 1000, min_parallax_mas: float = 50.0) -> str:

@@ -13,6 +13,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from datalake.quality import Check
+
 GAPS_DATASET = "public-global-gaps-events:latest"
 TOKEN_ENV = "GFW_API_ACCESS_TOKEN"
 
@@ -33,6 +35,20 @@ GAP_EVENT_SCHEMA = {
     "duration_hours": ("float", "gap.duration_hours"),
     "intentional_disabling": ("bool", "gap.intentional_disabling"),
 }
+
+
+# Data-quality rules (Lesson 6). A row matching the condition is flagged, never removed.
+# "end" is quoted because END is an SQL keyword. 8760 hours = 365 days.
+GAP_EVENT_CHECKS = [
+    Check("end_before_start", "ocean.gap_events", '"end" < start', "error",
+          "A gap cannot end before it starts."),
+    Check("non_positive_duration", "ocean.gap_events", "duration_hours <= 0", "error",
+          "A gap must last longer than zero hours."),
+    Check("missing_duration", "ocean.gap_events", "duration_hours IS NULL", "warning",
+          "GFW normally sends a duration; check the raw record."),
+    Check("extreme_duration", "ocean.gap_events", "duration_hours > 8760", "warning",
+          "Longer than a year: real but rare (an event overlapping our window), and it can distort averages."),
+]
 
 
 def get_token(env_file: Path = Path(".env")) -> str:

@@ -99,4 +99,11 @@
 | **ADQL** | Astronomical Data Query Language: SQL with extras for sky positions, used to question TAP archives |
 | **Synchronous vs asynchronous query** | Sync waits for the answer in one request (quick, small); async runs in the background (slower, bigger) |
 | **Rule of three** | Wait until you have copied something three times before sharing it as common code; two near-copies are cheaper than a wrong shared design |
+| **Data-quality check** | A rule that describes a suspicious row (as a SQL condition) so we can count and look at such rows after every load |
+| **Flag vs delete** | Flagging marks and reports a strange row; deleting destroys it. We only flag, because a strange value may be a real discovery |
+| **Error vs warning** | Error = impossible (end before start); warning = merely suspicious (a gap over a year). Errors fail a run, warnings do not |
+| **Exit code** | The number a command gives back when it finishes: 0 = fine, anything else = failed. Automation tools like GitHub Actions use it to stop a job |
+| **Read-only connection** | Opening the database so it can be read but never changed; even a buggy rule cannot damage the data |
+| **Tripwire (assumption) check** | A check that should never fire, like a star with a weak parallax after we asked only for strong ones; if it does, something we assumed has changed |
+| **Plausible but wrong** | A value inside every allowed range that is still false (Sirius showing a brightness of 8.5); simple rules miss these, comparing columns can catch them |
 
