@@ -194,3 +194,15 @@ When the table exists, `python -m datalake.flybys` adds `rv_err_kms` and `rv_tra
 suspicious radial velocity can be judged against its own margin of error. Join the tables yourself with
 `... FROM astro.nearby_stars JOIN astro.star_errors USING (source_id)`.
 
+
+## Refresh the astronomy data (one command)
+
+```
+python -m datalake.refresh
+```
+
+Gaia DR3 never changes, but the NASA Exoplanet Archive gains planets, so this repeats the astronomy work in
+three steps: fetch planets, fetch host positions, run the Gaia + exoplanet quality checks. Every step runs
+even if an earlier one failed. Exit code: 0 clean, 1 a quality `error` rule flagged rows, 2 a fetch failed or
+was incomplete (2 wins). A second run on the same day skips the fetches (raw is never overwritten) and still
+checks quality, so it is safe to re-run. GFW is not part of it. Data: NASA Exoplanet Archive (Caltech/IPAC).

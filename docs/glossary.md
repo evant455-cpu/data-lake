@@ -170,3 +170,5 @@
 | **Projected separation** | How far apart two stars look, turned into AU: angle on the sky (arcsec) x distance (pc). It is a minimum, because one star may also sit in front of the other |
 | **Mutation check** | Breaking the code on purpose (one small change) and checking that a test fails. If no test fails, the tests were not really guarding that line |
 | **Spy (in a test)** | A wrapper around a real function that records how it was called. We use one to prove the scores really come from cross-validation |
+| **Exit code** | The number a program hands back when it finishes: 0 means fine, anything else means a problem. A scheduler reads it to decide whether to raise an alarm. `datalake.refresh` uses 0, 1 (quality error) and 2 (fetch failed) |
+| **Idempotent** | Safe to run twice: the second run changes nothing and breaks nothing. `refresh` is idempotent on the same day because raw files are never overwritten |
