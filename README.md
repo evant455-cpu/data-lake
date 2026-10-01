@@ -106,6 +106,15 @@ stars: by Gaia number first, else by sky position within 10 arcsec (`--radius`),
 2016 (Gaia) and 2000 (the archive does not say which year its positions are for). Read-only; position matches are
 listed for a person to check, with a note when more than one star was inside the radius.
 
+## Stars that should have a known planet but do not (first ML model)
+
+`python -m datalake.planet_gaps [--top N]` (needs `pip install scikit-learn`) trains a logistic-regression
+classifier on our stars: features = distance (log10 pc), G, colour, absolute G, missing-colour flag, has a Gaia
+radial velocity; label = hosts a known planet (from `datalake.planet_hosts`, so position matches count). Every star is
+scored with 5-fold cross-validation by a model that never saw it. It prints AUC and average precision (with what
+random guessing would give), the weights the model leans on, and the stars with no known planet that look most like
+the hosts. A high score means "looks like where planets have been found so far", not "has a planet". Read-only.
+
 ## Data-quality checks
 
 ```

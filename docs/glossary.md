@@ -162,3 +162,8 @@
 | **Epoch (of a position)** | The date a sky position is for. Stars move, so a position needs a date: Gaia DR3 positions are for 2016, many catalogues use 2000 |
 | **Cross-match** | Finding the same star in two catalogues. Best by a shared ID; otherwise by sky position, within a small radius |
 | **Match radius** | How close (in arcseconds) two catalogue positions must be to count as the same star. Too big catches neighbours, too small misses real matches |
+| **Out-of-fold score** | A star's score from the cross-validation model that was trained WITHOUT that star. The only honest score for "is this star surprising?" |
+| **Weight (coefficient)** | How strongly logistic regression leans on a feature. Features are first put on a common scale (standardised), so weights can be compared: + pushes towards "host", - away |
+| **Standardise** | Rescale a feature to average 0 and spread 1, so distance in parsecs and brightness in magnitudes can be compared fairly |
+| **Average precision** | A score for how well the true hosts are packed at the top of the ranking. Random guessing scores the share of hosts (here about 0.03) |
+| **Spy (in a test)** | A wrapper around a real function that records how it was called. We use one to prove the scores really come from cross-validation |
