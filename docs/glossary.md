@@ -151,3 +151,11 @@
 | **Count check (completeness)** | Asking the archive "how many rows do you have?" and comparing with what we received. Better than guessing a row limit, because it works whatever the limit is |
 | **pscomppars** | The archive's "Planetary Systems Composite Parameters" table: one row per known planet, with the best-known values combined from many papers |
 | **Minimum mass (m sin i)** | The planet mass from the radial-velocity method is only a lower limit, because we do not know how tilted the orbit is. Most `pl_bmasse` values for Radial Velocity planets are this |
+| **Classifier** | A machine-learning model that sorts rows into groups, here "has a known planet" or "not". It gives each star a probability, not just a yes/no |
+| **Features** | The inputs a model learns from, here distance, brightness, colour, absolute magnitude and whether Gaia has a radial velocity |
+| **Labels** | The answers the model learns to predict, here "is this star a known planet host?". Wrong labels teach the model wrong lessons |
+| **Cross-validation** | Splitting the data into parts (folds), training on all but one and scoring the part left out, in turn. Every star is scored by a model that never saw it, so a high score is earned, not memorised |
+| **AUC** | "Area under the curve": the chance the model ranks a random host above a random non-host. 0.5 = coin flip, 1.0 = perfect |
+| **Logistic regression** | A simple classifier: a weighted sum of the features, squeezed into a probability between 0 and 1. Easy to inspect, a good first model |
+| **Gradient boosting** | A stronger but harder-to-inspect classifier that builds many small decision trees, each fixing the last one's mistakes |
+| **scikit-learn** | The standard Python library for classic machine learning (models, cross-validation, scores). Install with `pip install scikit-learn` |
