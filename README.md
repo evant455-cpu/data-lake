@@ -32,11 +32,14 @@ python -m datalake.connectors.gfw 2022-01-01 2022-05-01
 Args: start date, end date, optional region id (default 5690, Russia EEZ).
 It fetches the events, lands them raw, cleans them to Parquet, and loads `ocean.gap_events`.
 The last lines show the count of values that did not fit their type; a high count means a field name or type differs from what we assumed.
-Ask a question of the warehouse:
+Ask the warehouse a question (read-only, times shown in UTC):
 
 ```
-python -c "from datalake.warehousing import query; print(query('SELECT vessel_flag, count(*) FROM ocean.gap_events GROUP BY 1'))"
+python -m datalake.warehousing "SELECT vessel_flag, count(*) AS events FROM ocean.gap_events GROUP BY 1 ORDER BY 2 DESC"
 ```
+
+Use double quotes around the SQL and single quotes inside it. The SQL can also read clean files directly:
+`... FROM read_parquet('lake/clean/gfw/gap-events/*/*.parquet')`.
 
 Already fetched today (or cleaning failed after the raw file landed)? Rebuild from the raw file, no token or network needed:
 

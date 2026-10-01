@@ -25,6 +25,17 @@ def _check_name(name: str) -> str:
     return name
 
 
+def _connect_read_only(warehouse_path: Path):
+    """Open the warehouse read-only, showing every timestamp in UTC.
+
+    Without this, DuckDB converts times to the computer's local time zone, so the same
+    data would look different on different machines.
+    """
+    con = duckdb.connect(str(warehouse_path), read_only=True)
+    con.execute("SET TimeZone = 'UTC'")
+    return con
+
+
 def load_table(
     parquet_file: Path,
     *,
@@ -61,7 +72,7 @@ def query(sql: str, warehouse_path: Path = DEFAULT_WAREHOUSE) -> list[tuple]:
 
     Opens the warehouse read-only, so a question can never change the data.
     """
-    con = duckdb.connect(str(warehouse_path), read_only=True)
+    con = _connect_read_only(warehouse_path)
     try:
         return con.execute(sql).fetchall()
     finally:
@@ -179,3 +190,43 @@ def append_table(
         raise
     finally:
         con.close()
+
+
+def ask(sql: str, warehouse_path: Path = DEFAULT_WAREHOUSE, max_rows: int = 50) -> str:
+    """Run a SQL question (read-only) and return the answer as a small text table.
+
+    The SQL may also read clean files directly, e.g.
+    SELECT count(*) FROM read_parquet('lake/clean/gfw/gap-events/*/*.parquet')
+    """
+    con = _connect_read_only(warehouse_path)
+    try:
+        cur = con.execute(sql)
+        names = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        con.close()
+    shown = [["" if v is None else str(v) for v in r] for r in rows[:max_rows]]
+    widths = [max([len(n)] + [len(r[i]) for r in shown]) for i, n in enumerate(names)]
+    line = lambda cells: "  ".join(c.ljust(w) for c, w in zip(cells, widths)).rstrip()  # noqa: E731
+    out = [line(names), line(["-" * w for w in widths])] + [line(r) for r in shown]
+    out.append(f"({len(rows)} row{'s' if len(rows) != 1 else ''}" + (f", showing {max_rows}" if len(rows) > max_rows else "") + ")")
+    return "\n".join(out)
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Command line: python -m datalake.warehousing "SELECT ..." [--warehouse PATH]"""
+    import argparse
+
+    p = argparse.ArgumentParser(description="Ask the warehouse a SQL question (read-only).")
+    p.add_argument("sql", help='e.g. "SELECT count(*) FROM ocean.gap_events"')
+    p.add_argument("--warehouse", default=str(DEFAULT_WAREHOUSE))
+    p.add_argument("--max-rows", type=int, default=50)
+    a = p.parse_args(argv)
+    try:
+        print(ask(a.sql, Path(a.warehouse), a.max_rows))
+    except duckdb.Error as e:
+        raise SystemExit(f"SQL problem: {e}")
+
+
+if __name__ == "__main__":
+    main()

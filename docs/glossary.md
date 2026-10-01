@@ -74,3 +74,8 @@
 | **Rollback** | Undoing a transaction's steps after a failure |
 | **Schema drift** | The shape of incoming data changing (new or missing columns); we stop loudly instead of mixing shapes |
 | **Mutation check** | Deliberately breaking code to prove the tests notice; a test that cannot fail proves nothing |
+| **Hidden (transitive) dependency** | A library your code needs only because another library uses it; if that library drops it, things break (pytz did) |
+| **Local time vs UTC** | Local time shifts by place; UTC does not. We store and show UTC so data looks the same on every machine |
+| **Window function** | SQL that looks at a row together with its group, e.g. "how many rows share this vessel and start time?" |
+| **Glob (wildcard)** | A pattern like `*.parquet` that matches many files at once |
+| **Duplicate vs different record** | Two rows sharing a key might be true copies or genuinely different events; check before assuming |
