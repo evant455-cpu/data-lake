@@ -94,3 +94,17 @@ Exit code is 1 if any `[ERROR]` rule flags rows (warnings do not fail the run), 
 Rules sit next to each source's schema: `GAP_EVENT_CHECKS` in `connectors/gfw.py`,
 `NEARBY_STARS_CHECKS` in `connectors/gaia.py`. A new source adds its own list and registers it in `quality.all_checks`.
 
+## Rebuild from raw
+
+Clean files and the warehouse can always be re-created from raw. To prove it on your own data without touching
+anything, build a second warehouse and compare it with the real one:
+
+```
+python -m datalake.rebuild --warehouse warehouse/rebuilt.duckdb --compare warehouse/warehouse.duckdb
+```
+
+It replays every raw file in the order it was fetched (from each file's `.meta.json`), re-creates the clean files,
+loads the rebuilt warehouse, then reports each table as `identical` or `DIFFERENT` (exit code 1 on a difference).
+An existing warehouse is never overwritten unless you add `--replace`; the new one is built beside it and swapped
+in only if every file worked. Raw files are only read. Raw files of a source it does not know yet are skipped with a note.
+
