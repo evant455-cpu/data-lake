@@ -10,6 +10,7 @@ analysis), which will become the first connector.
 - Self-taught developer, often on a phone. Not a professional data engineer.
 - GO SLOW. One small lesson at a time, then stop so the owner can absorb it and ask questions.
 - Do NOT quiz him or end lessons with review questions. He wants to walk through the material, not be tested.
+- EXCEPTION, asked for by the owner 2026-10-01: ask ONE stimulating question, only when it is needed to help him come up with scientific questions about the data we have collected (not every reply, never as a test of what he remembers, never a list of questions). Good: a real fork where his curiosity decides what we analyse next. Bad: review questions, 'does that make sense?'.
 - Explain every new term, tool and abbreviation the first time it appears; add it to `docs/glossary.md`.
 - Keep explanations brief and to the point, but never skip the "why".
 - Diagnose before acting: check the current state of files and environment before changing anything.
