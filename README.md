@@ -59,3 +59,20 @@ is still saved, and a later fetch of a narrower range fills the gap safely (upse
 Limits: GFW allows 50,000 requests a day and 1.5 million a month; going over is blocked (error 429) for 24 hours
 or 30 days.
 Data: Global Fishing Watch (CC BY-NC 4.0, credit required, non-commercial use).
+
+## Live run: Gaia nearby stars (astronomy)
+
+No account or token needed. From the repo folder:
+
+```
+python -m datalake.connectors.gaia
+```
+
+It asks the Gaia archive for the 1000 nearest well-measured stars (closer than 20 parsecs), lands the CSV
+raw, cleans it, and loads `astro.nearby_stars` in the same warehouse file as the ocean data.
+Ask it something: `python -m datalake.warehousing "SELECT source_id, parallax, phot_g_mean_mag FROM astro.nearby_stars ORDER BY parallax DESC LIMIT 5"`.
+If you get exactly the limit, the output starts with `WARNING: INCOMPLETE FETCH` (the archive's quick queries
+are reported to cut off silently at 2000 rows, so the limit cannot go above that).
+Same rules as GFW: raw is never overwritten; `--raw PATH` re-cleans a file without the network.
+Data: ESA Gaia DR3 (ESA/Gaia/DPAC).
+

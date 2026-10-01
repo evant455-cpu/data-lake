@@ -88,3 +88,15 @@
 | **Rate limit** | How many requests a source lets you make per day or month; GFW allows 50,000 a day |
 | **HTTP 429** | The "too many requests" reply; GFW blocks you for a day or a month after it |
 | **Complete vs incomplete fetch** | Whether we know we got everything; an incomplete fetch is flagged loudly, never passed off as full |
+| **Gaia** | A European Space Agency telescope that measures the position, distance and motion of over a billion stars; DR3 is its third public data release |
+| **Parallax** | The tiny yearly wobble in a star's position as Earth orbits the Sun; the bigger the wobble, the closer the star. Measured in milliarcseconds (mas) |
+| **Parsec (pc)** | A distance unit, about 3.26 light-years; a star with a parallax of 50 mas is 20 pc away |
+| **Proper motion** | How far a star drifts across the sky each year (mas per year) |
+| **Magnitude (G mag)** | Brightness on a backwards scale: a smaller number is brighter; G is Gaia's own colour band |
+| **bp_rp** | A star's colour: its blue brightness minus its red brightness; bigger means redder (the Sun is about 0.8) |
+| **Radial velocity** | Speed toward or away from us in km/s; many stars have none measured, so it is null |
+| **TAP** | Table Access Protocol: astronomy's standard way to ask an archive a question over the web |
+| **ADQL** | Astronomical Data Query Language: SQL with extras for sky positions, used to question TAP archives |
+| **Synchronous vs asynchronous query** | Sync waits for the answer in one request (quick, small); async runs in the background (slower, bigger) |
+| **Rule of three** | Wait until you have copied something three times before sharing it as common code; two near-copies are cheaper than a wrong shared design |
+
